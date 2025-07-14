@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tesh254/stick/internal/constants"
+	"github.com/tesh254/stick/internal/vbranch"
 	"github.com/tesh254/stick/internal/version"
 )
 
@@ -19,6 +20,7 @@ var rootCmd = &cobra.Command{
 	Version: constants.VERSION(),
 	Aliases: []string{"stk"},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		vbranch.InitializeState()
 		if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
 			fmt.Println(constants.DETAILED_VERSION())
 			return nil
@@ -120,8 +122,15 @@ func init() {
 	versionCmd.Flags().BoolP("commit", "c", false, "Output version with commit hash")
 	rootCmd.AddCommand(buildInfoCmd)
 	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(createBranchCmd)
+	rootCmd.AddCommand(initCmd())
+	rootCmd.AddCommand(branchCmd())
+	rootCmd.AddCommand(statusCmd())
+	rootCmd.AddCommand(addCmd())
+	rootCmd.AddCommand(moveCmd())
+	rootCmd.AddCommand(pushCmd())
+	rootCmd.AddCommand(applyCmd())
+	rootCmd.AddCommand(unapplyCmd())
+	rootCmd.AddCommand(syncCmd())
 }
 
 func initConfig() {

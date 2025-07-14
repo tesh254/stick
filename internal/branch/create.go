@@ -30,28 +30,28 @@ func CreateVirtualBranch(branchName *string, remoteName *string) {
 		if remoteName == nil {
 			remoteMessage = "\nplease provide a remote name if it's not origin"
 		}
-		fmt.Println("Error:", err, remoteMessage)
+		fmt.Println("error:", err, remoteMessage)
 		return
 	}
 
 	// fetch from remote
-	fmt.Printf("Fetching from remote '%s'...\n", rm)
+	fmt.Printf("fetching from remote '%s'...\n", rm)
 	if err := fetchRemote(rm); err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("error:", err)
 		return
 	}
 
 	// get default branch
 	defaultBranch, err := getDefaultBranch(rm)
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("error:", err)
 		return
 	}
 
 	// get all remote branches
 	branchList, err := getRemoteBranches(rm)
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("error:", err)
 		return
 	}
 
@@ -96,13 +96,13 @@ func CreateVirtualBranch(branchName *string, remoteName *string) {
 
 	// check if the branch already exists
 	if branchExists(gitBranchName) {
-		fmt.Printf("Git branch '%s' already exists\n", gitBranchName)
+		fmt.Printf("git branch '%s' already exists\n", gitBranchName)
 		return
 	}
 
 	// create the local branch from the remote branch
 	if err := createLocalBranch(gitBranchName, rm, baseBranch); err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("error:", err)
 		return
 	}
 

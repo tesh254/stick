@@ -13,6 +13,9 @@ const ASCII = `
 +-+-+-+-+-+--+
 `
 
+const STICK_DIR = ".stick"
+const STATE_FILE = ".stick/state.json"
+
 // VERSION returns the current version from build info
 func VERSION() string {
 	return version.GetVersion()
