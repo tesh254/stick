@@ -199,3 +199,22 @@ func addFileToVirtualBranch(branch *VirtualBranch, filename string) error {
 
 	return fmt.Errorf("file %s has no changes to add", filename)
 }
+
+func getUniqueBranchName(desiredName string) string {
+	name := desiredName
+	counter := 1
+	for {
+		found := false
+		for _, branch := range state.Branches {
+			if branch.Name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return name
+		}
+		name = fmt.Sprintf("%s-%d", desiredName, counter)
+		counter++
+	}
+}

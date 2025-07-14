@@ -55,8 +55,9 @@ func ListBranches() {
 }
 
 func CreateBranch(name string) {
+	uniqueName := getUniqueBranchName(name)
 	branch := &VirtualBranch{
-		Name:      name,
+		Name:      uniqueName,
 		ID:        generateID(),
 		Files:     make(map[string]string),
 		Hunks:     []Hunk{},
@@ -67,7 +68,12 @@ func CreateBranch(name string) {
 
 	state.Branches[branch.ID] = branch
 	saveState()
-	fmt.Printf("created virtual branch: %s\n", name)
+
+	if uniqueName != name {
+		fmt.Printf("branch '%s' already exists, created '%s' instead\n", name, uniqueName)
+	} else {
+		fmt.Printf("created virtual branch: %s\n", uniqueName)
+	}
 }
 
 func SwitchBranch(name string, args []string) {

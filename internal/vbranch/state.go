@@ -79,8 +79,13 @@ func saveState() error {
 
 func AddAll() {
 	branch := state.Branches[state.CurrentBranch]
+	if branch == nil {
+		fmt.Printf("error: current branch with ID '%s' not found in state. Please check your '.stick/state.json' file.\n", state.CurrentBranch)
+		return
+	}
 	gitStatus := getGitStatus()
 	for _, statusLine := range gitStatus {
+
 		if len(statusLine) > 3 {
 			status := statusLine[:2]
 			filename := strings.TrimSpace(statusLine[3:])
