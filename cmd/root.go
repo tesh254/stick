@@ -4,16 +4,18 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/tesh254/stick/internal/constants"
 	"github.com/tesh254/stick/internal/version"
 )
 
 var rootCmd = &cobra.Command{
 	Use:     "stick",
-	Short:   "Stick is a lightweight CLI tool for managing multiple virtual branches in Git, enabling seamless work on different features without branch switching.",
+	Short:   "stick is a lightweight CLI tool for managing multiple virtual branches in Git, enabling seamless work on different features without branch switching.",
 	Version: constants.VERSION(),
 	Aliases: []string{"stk"},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -107,7 +109,7 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize()
+	cobra.OnInitialize(initConfig)
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	// Root command flags
 	rootCmd.Flags().BoolP("version", "v", false, "Print detailed version information")
@@ -118,4 +120,40 @@ func init() {
 	versionCmd.Flags().BoolP("commit", "c", false, "Output version with commit hash")
 	rootCmd.AddCommand(buildInfoCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(initCmd)
+}
+
+func initConfig() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error getting home directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	configDir := filepath.Join(home, ".stick")
+	configName := "config"
+	configType := "json"
+
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating config directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Configure Viper
+	viper.SetConfigName(configName)
+	viper.SetConfigType(configType)
+	viper.AddConfigPath(configDir)
+
+	// Read configuration file, ignore if it doesn't exist
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			if err := viper.SafeWriteConfig(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating config file: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "Error reading config file: %v\n", err)
+			os.Exit(1)
+		}
+	}
 }
