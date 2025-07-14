@@ -1,0 +1,8 @@
+{
+	"virtualBranches": {
+		"portal": {
+			"gitBranch": "stick/portal",
+			"files": []
+		}
+	}
+}

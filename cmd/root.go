@@ -36,8 +36,8 @@ var rootCmd = &cobra.Command{
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Show version information",
-	Long: `Show version information for stick.
+	Short: "show version information",
+	Long: `show version information for stick.
 This command displays version information extracted automatically from 
 the Go build system, including Git commit, build date, and more.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -67,8 +67,8 @@ the Go build system, including Git commit, build date, and more.`,
 // Build info command for detailed build information
 var buildInfoCmd = &cobra.Command{
 	Use:   "buildinfo",
-	Short: "Show detailed build information",
-	Long:  `Show comprehensive build information including module details, VCS info, and build settings.`,
+	Short: "show detailed build information",
+	Long:  `show comprehensive build information including module details, VCS info, and build settings.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		info := version.GetBuildInfo()
 
@@ -121,6 +121,7 @@ func init() {
 	rootCmd.AddCommand(buildInfoCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(createBranchCmd)
 }
 
 func initConfig() {
@@ -147,7 +148,7 @@ func initConfig() {
 	// Read configuration file, ignore if it doesn't exist
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			if err := viper.SafeWriteConfig(); err != nil {
+			if err = viper.SafeWriteConfig(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error creating config file: %v\n", err)
 				os.Exit(1)
 			}
