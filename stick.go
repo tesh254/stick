@@ -1,7 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"github.com/tesh254/stick/cmd"
+)
 
 func main() {
-	fmt.Println("hello world!")
+	cmd.Execute()
 }
