@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/transport/ssh"
+	"golang.org/x/term"
 )
 
 type ReleaseOutput struct {
@@ -80,42 +83,101 @@ func CreateAndPushRelease(ctx context.Context, repoPath, tagName, commitHash, me
 		return fmt.Errorf("failed to get origin remote: %w", err)
 	}
 
-	// Using SSH agent for authentication
-	auth, err := ssh.NewSSHAgentAuth("git")
+	// Using public key for authentication
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home dir: %w", err)
+	}
+
+	sshPath := filepath.Join(home, ".ssh")
+	files, err := os.ReadDir(sshPath)
 	if err != nil {
 		tableData[0][3] = red("failed")
 		printTable(tableData)
-		return fmt.Errorf("failed to get auth for origin: %w", err)
+		return fmt.Errorf("failed to read ssh keys from %s: %w", sshPath, err)
 	}
 
-	// Push the tag
-	err = remote.Push(&git.PushOptions{
-		RefSpecs: []config.RefSpec{
-			config.RefSpec(fmt.Sprintf("refs/tags/%s:refs/tags/%s", tagName, tagName)),
-		},
-		Auth: auth,
-	})
-	if err != nil && err != git.NoErrAlreadyUpToDate {
+	var lastPushErr error
+	pushSuccess := false
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		keyPath := filepath.Join(sshPath, file.Name())
+
+		auth, authErr := ssh.NewPublicKeysFromFile("git", keyPath, "")
+		if authErr != nil {
+			if strings.Contains(authErr.Error(), "ssh: a password is required") {
+				fmt.Printf("Enter password for key %s: ", file.Name())
+				password, passErr := term.ReadPassword(int(syscall.Stdin))
+				if passErr != nil {
+					lastPushErr = fmt.Errorf("failed to read password: %w", passErr)
+					continue
+				}
+				fmt.Println()
+				auth, authErr = ssh.NewPublicKeysFromFile("git", keyPath, string(password))
+				if authErr != nil {
+					lastPushErr = fmt.Errorf("failed to create auth with password for %s: %w", keyPath, authErr)
+					continue
+				}
+			} else {
+				// Not a password error, just a key that can't be parsed, so skip it.
+				lastPushErr = authErr
+				continue
+			}
+		}
+
+		// Attempt to push with the current key
+		pushErr := remote.Push(&git.PushOptions{
+			RefSpecs: []config.RefSpec{
+				config.RefSpec(fmt.Sprintf("refs/tags/%s:refs/tags/%s", tagName, tagName)),
+			},
+			Auth: auth,
+		})
+
+		if pushErr == nil || pushErr == git.NoErrAlreadyUpToDate {
+			pushSuccess = true
+			break
+		}
+
+		lastPushErr = pushErr
+	}
+
+	if !pushSuccess {
 		tableData[0][3] = red("failed")
 		printTable(tableData)
-		return fmt.Errorf("failed to push tag: %w", err)
+		if lastPushErr != nil {
+			return fmt.Errorf("failed to push tag, last error: %w", lastPushErr)
+		}
+		return fmt.Errorf("failed to push tag: no valid ssh key found")
 	}
 
-	// Update status to success
 	tableData[0][3] = green("success")
 
-	// Print the table
 	printTable(tableData)
 
 	return nil
 }
 
 func printTable(data [][]string) {
+	if len(data) == 0 || len(data[0]) < 4 {
+		return
+	}
+	row := data[0]
+	tag := row[0]
+	commit := row[1]
+	message := row[2]
+	status := row[3]
+
+	bold := color.New(color.Bold).SprintFunc()
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	defer w.Flush()
-	header := []string{"Tag", "Commit", "Message", "Status"}
-	fmt.Fprintln(w, strings.Join(header, "	"))
-	for _, row := range data {
-		fmt.Fprintln(w, strings.Join(row, "	"))
-	}
+
+	fmt.Fprintln(w, "|\t\t|")
+	fmt.Fprintln(w, "|----------\t|------------------------------------------|")
+	fmt.Fprintf(w, "| %s\t| %s\t|\n", bold("commit"), commit)
+	fmt.Fprintf(w, "| %s\t| %s\t|\n", bold("tag"), tag)
+	fmt.Fprintf(w, "| %s\t| %s\t|\n", bold("message"), message)
+	fmt.Fprintf(w, "| %s\t| %s\t|\n", bold("status"), status)
 }
