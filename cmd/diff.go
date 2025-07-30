@@ -27,7 +27,7 @@ var showCmd = &cobra.Command{
 
 		jsonOutput, err := diff.ShowCommitDiff(repoPath, commit)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			log.Error(fmt.Sprintf("%v\n", err), "repo-path", repoPath, "commit", commit)
 			os.Exit(1)
 		}
 
