@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"text/tabwriter"
 	"time"
 
 	"github.com/fatih/color"
@@ -16,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/transport/ssh"
+	"github.com/olekukonko/tablewriter"
 	"golang.org/x/term"
 )
 
@@ -46,6 +46,7 @@ func CreateAndPushRelease(ctx context.Context, repoPath, tagName, commitHash, me
 	}
 
 	tableData := [][]string{
+		{"tag", "commit", "message", "status"},
 		{
 			tagName,
 			commit.Hash.String(),
@@ -164,20 +165,8 @@ func printTable(data [][]string) {
 	if len(data) == 0 || len(data[0]) < 4 {
 		return
 	}
-	row := data[0]
-	tag := row[0]
-	commit := row[1]
-	message := row[2]
-	status := row[3]
-
-	bold := color.New(color.Bold).SprintFunc()
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	defer w.Flush()
-
-	fmt.Fprintln(w, "|\t\t|")
-	fmt.Fprintln(w, "|----------\t|------------------------------------------|")
-	fmt.Fprintf(w, "| %s\t| %s\t|\n", bold("commit"), commit)
-	fmt.Fprintf(w, "| %s\t| %s\t|\n", bold("tag"), tag)
-	fmt.Fprintf(w, "| %s\t| %s\t|\n", bold("message"), message)
-	fmt.Fprintf(w, "| %s\t| %s\t|\n", bold("status"), status)
+	table := tablewriter.NewWriter(os.Stdout)
+	table.Header(data[0])
+	table.Bulk(data[1:])
+	table.Render()
 }
