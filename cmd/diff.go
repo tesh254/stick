@@ -6,13 +6,13 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
-	"github.com/tesh254/stick/internal/diff"
+	"github.com/tesh254/stick/internal/vc/diff"
 )
 
 var showCmd = &cobra.Command{
 	Use:     "show",
 	Short:   "show various types of objects",
-	Example: `stick show --repo-path <directory> --commit <commit_hash> \n--repo-path value is optional`,
+	Example: `stick show --repo-path <directory> --commit <commit_hash>`,
 	Run: func(cmd *cobra.Command, args []string) {
 		repoPath, _ := cmd.Flags().GetString("repo-path")
 		commit, _ := cmd.Flags().GetString("commit")

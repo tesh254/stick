@@ -150,10 +150,21 @@ func init() {
 	versionCmd.Flags().BoolP("commit", "c", false, "Output version with commit hash")
 
 	// show command flags
-	showCmd.Flags().StringP("repo-path", "r", "current", "directory to check commit diff")
+	showCmd.Flags().StringP("repo-path", "r", "current", "directory to check commit diff, --repo-path (optional) auto picks current pwd")
 	showCmd.Flags().StringP("commit", "c", "", "commit hash to check diff")
+
+	// release command flags
+	releaseCmd.Flags().StringP("repo-path", "r", "current", "directory to push and release")
+	releaseCmd.Flags().StringP("commit", "c", "HEAD", "commit hash or default to HEAD")
+	releaseCmd.Flags().StringP("message", "m", "", "commit message")
+	releaseCmd.Flags().StringP("tag", "t", "", "commit hash to check diff")
+
+	// status command flags
+	statusCmd.Flags().StringP("repo-path", "r", "current", "directory to check worktree changes")
 
 	stickCmd.AddCommand(buildInfoCmd)
 	stickCmd.AddCommand(versionCmd)
 	stickCmd.AddCommand(showCmd)
+	stickCmd.AddCommand(releaseCmd)
+	stickCmd.AddCommand(statusCmd)
 }
