@@ -24,11 +24,32 @@ func NewStickConfig() *StickConfig {
 	}
 }
 
+var stickCmd = &cobra.Command{
+	Use:     "stick",
+	Short:   "Stick basically upgrades your git",
+	Aliases: []string{"stk"},
+	// Use the container's NewRun method to inject dependencies.
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Handle version flag specially to show detailed info
+		if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
+			fmt.Println(constants.DETAILED_VERSION())
+			return nil
+		}
+
+		if cmd.Flags().NFlag() == 0 && len(args) == 0 {
+			fmt.Print(constants.STICK_ASCII)
+			fmt.Println(constants.CurrentOSWithVersion())
+			fmt.Printf("\n%s\n", constants.GetReleaseInfo())
+		}
+		return nil
+	},
+}
+
 // Version command with multiple output formats
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Show version information",
-	Long: `Show version information for migraine.
+	Short: "show version information",
+	Long: `show version information for stick.
 
 This command displays version information extracted automatically from 
 the Go build system, including Git commit, build date, and more.`,
@@ -93,28 +114,6 @@ var buildInfoCmd = &cobra.Command{
 	},
 }
 
-var (
-	stickCmd = &cobra.Command{
-		Use:   "stick",
-		Short: "Stick basically upgrades your git",
-		// Use the container's NewRun method to inject dependencies.
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Handle version flag specially to show detailed info
-			if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
-				fmt.Println(constants.DETAILED_VERSION())
-				return nil
-			}
-
-			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
-				fmt.Print(constants.STICK_ASCII)
-				fmt.Println(constants.CurrentOSWithVersion())
-				fmt.Printf("\n%s\n", constants.GetReleaseInfo())
-			}
-			return nil
-		},
-	}
-)
-
 // Execute runs the root command.
 func Execute() {
 	if err := fang.Execute(context.Background(), stickCmd, fang.WithVersion(constants.VERSION())); err != nil {
@@ -149,6 +148,12 @@ func init() {
 	versionCmd.Flags().Bool("json", false, "Output version information in JSON format")
 	versionCmd.Flags().BoolP("short", "s", false, "Output short version only")
 	versionCmd.Flags().BoolP("commit", "c", false, "Output version with commit hash")
+
+	// show command flags
+	showCmd.Flags().StringP("repo-path", "r", "current", "directory to check commit diff")
+	showCmd.Flags().StringP("commit", "c", "", "commit hash to check diff")
+
 	stickCmd.AddCommand(buildInfoCmd)
 	stickCmd.AddCommand(versionCmd)
+	stickCmd.AddCommand(showCmd)
 }
