@@ -1,3 +1,4 @@
+// Package version provides functionality for getting build and version information.
 package version
 
 import (

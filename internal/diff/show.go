@@ -1,4 +1,4 @@
-// git show <commit_hash>
+// Package diff provides functionality to show differences between commits.
 package diff
 
 import (
@@ -12,6 +12,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/object"
 )
 
+// CommitOutput represents the structured output of a commit diff.
 type CommitOutput struct {
 	Commit struct {
 		Hash    string `json:"hash"`
@@ -23,19 +24,22 @@ type CommitOutput struct {
 	Files []FileChange `json:"files"`
 }
 
+// FileChange represents the changes in a single file.
 type FileChange struct {
-	Path     string       `json:"path"`
-	Status   string       `json:"status"`
-	Changes  []LineChange `json:"changes"`
-	isBinary bool         `json:"is_binary"`
+	Path    string       `json:"path"`
+	Status  string       `json:"status"`
+	Changes []LineChange `json:"changes"`
 }
 
+// LineChange represents a single line change in a file.
 type LineChange struct {
 	Line    int    `json:"line"`
-	Type    string `json:"type"`
+	Type    string `json:"type"` // Type of change: "added" or "deleted"
 	Content string `json:"content"`
 }
 
+// ShowCommitDiff generates a diff for a given commit hash in a repository.
+// It returns the diff as a JSON byte array.
 func ShowCommitDiff(repoPath string, commitHash string) ([]byte, error) {
 	repo, err := git.PlainOpen(repoPath)
 
@@ -102,8 +106,7 @@ func ShowCommitDiff(repoPath string, commitHash string) ([]byte, error) {
 		}
 
 		for _, filePatch := range patch.FilePatches() {
-			fileChange.isBinary = filePatch.IsBinary()
-			if fileChange.isBinary {
+			if filePatch.IsBinary() {
 				continue
 			}
 			for i, chunk := range filePatch.Chunks() {
@@ -129,6 +132,7 @@ func ShowCommitDiff(repoPath string, commitHash string) ([]byte, error) {
 	return json.MarshalIndent(output, "", "  ")
 }
 
+// getChangeStatus determines the status of a change (added, deleted, modified).
 func getChangeStatus(change *object.Change) string {
 	action, _ := change.Action()
 	switch action.String() {
