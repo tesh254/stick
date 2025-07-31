@@ -7,8 +7,10 @@ require (
 	github.com/charmbracelet/log v0.4.2
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v6 v6.0.0-20250728093604-6aaf1933ecab
+	github.com/olekukonko/tablewriter v1.0.9
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
+	github.com/stretchr/testify v1.10.0
 	golang.org/x/term v0.33.0
 )
 
@@ -26,6 +28,7 @@ require (
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect
@@ -47,9 +50,9 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/olekukonko/errors v1.1.0 // indirect
 	github.com/olekukonko/ll v0.0.9 // indirect
-	github.com/olekukonko/tablewriter v1.0.9 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pjbgf/sha1cd v0.4.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
