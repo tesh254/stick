@@ -8,21 +8,16 @@ import (
 	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tesh254/stick/internal/config"
 	"github.com/tesh254/stick/internal/constants"
 	"github.com/tesh254/stick/internal/version"
 )
 
 // StickConfig holds configuration for the application.
-type StickConfig struct {
-	Name string
-}
+type StickConfig = config.StickConfig
 
 // NewStickConfig is a constructor for StickConfig that reads from Viper.
-func NewStickConfig() *StickConfig {
-	return &StickConfig{
-		Name: viper.GetString("name"),
-	}
-}
+var NewStickConfig = config.NewStickConfig
 
 var stickCmd = &cobra.Command{
 	Use:     "stick",
@@ -125,6 +120,8 @@ func Execute() {
 func init() {
 	// Here you can define flags and bind them to viper.
 	stickCmd.PersistentFlags().String("name", "", "a name from a flag")
+	stickCmd.PersistentFlags().String("selected_model", "", "selected model e.g. gemini-pro")
+	stickCmd.PersistentFlags().String("api_key", "", "api key for the selected model")
 	home, err := os.UserHomeDir()
 	cobra.CheckErr(err)
 
@@ -139,8 +136,11 @@ func init() {
 		}
 	}
 	viper.BindPFlag("name", stickCmd.PersistentFlags().Lookup("name"))
+	viper.BindPFlag("selected_model", stickCmd.PersistentFlags().Lookup("selected_model"))
+	viper.BindPFlag("api_key", stickCmd.PersistentFlags().Lookup("api_key"))
 	cobra.OnInitialize()
-	stickCmd.CompletionOptions.DisableDefaultCmd = true
+	stickCmd.CompletionOptions.DisableDefaultCmd = false
+
 	// Root command flags
 	stickCmd.Flags().BoolP("version", "v", false, "Print detailed version information")
 
@@ -162,9 +162,13 @@ func init() {
 	// status command flags
 	statusCmd.Flags().StringP("repo-path", "r", "current", "directory to check worktree changes")
 
+	// agent commands
+	agentCmd.AddCommand(agentInitCmd)
+
 	stickCmd.AddCommand(buildInfoCmd)
 	stickCmd.AddCommand(versionCmd)
 	stickCmd.AddCommand(showCmd)
 	stickCmd.AddCommand(releaseCmd)
 	stickCmd.AddCommand(statusCmd)
+	stickCmd.AddCommand(agentCmd)
 }
