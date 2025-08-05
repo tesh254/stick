@@ -47,6 +47,14 @@ var models = []modelInfo{
 		context:      1048576,
 		description:  `faster time to first token and delivers more seamless and robust agentic experience`,
 	},
+	{
+		id:           "openrouter/horizon-beta",
+		name:         "OpenRouter: Horizon Beta",
+		inputCostPM:  0,
+		outputCostPM: 0,
+		context:      256000,
+		description:  `faster time to first token and delivers more seamless and robust agentic experience`,
+	},
 }
 
 var (

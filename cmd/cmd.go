@@ -161,6 +161,8 @@ func init() {
 
 	// status command flags
 	statusCmd.Flags().StringP("repo-path", "r", "current", "directory to check worktree changes")
+	diffCmd.Flags().StringP("repo-path", "r", "current", "directory to check worktree changes")
+	diffCmd.Flags().Bool("json", false, "output in json format")
 
 	// agent commands
 	agentCmd.AddCommand(agentInitCmd)
@@ -170,5 +172,6 @@ func init() {
 	stickCmd.AddCommand(showCmd)
 	stickCmd.AddCommand(releaseCmd)
 	stickCmd.AddCommand(statusCmd)
+	stickCmd.AddCommand(diffCmd)
 	stickCmd.AddCommand(agentCmd)
 }

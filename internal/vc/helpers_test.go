@@ -1,6 +1,7 @@
 package vc
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -87,4 +88,23 @@ func TestRetrieveRepoChangeStatus(t *testing.T) {
 	assert.Empty(t, worktree)
 	assert.Equal(t, "newfile.txt", staged[0].File)
 	assert.Equal(t, git.Added, staged[0].Type)
+}
+
+func TestGetOptimizedDiffJSON(t *testing.T) {
+	repo, path := setupRepo(t)
+	commit := createCommit(t, repo, path, "initial commit")
+	changes, err := getChanges(commit)
+	require.NoError(t, err)
+
+	jsonString, err := getOptimizedDiffJSON(changes)
+	require.NoError(t, err)
+
+	var fileChanges []map[string]interface{}
+	err = json.Unmarshal([]byte(jsonString), &fileChanges)
+	require.NoError(t, err, "should be a valid json")
+
+	require.Len(t, fileChanges, 1)
+	assert.Equal(t, "test.txt", fileChanges[0]["path"])
+	assert.Equal(t, "added", fileChanges[0]["status"])
+	assert.NotEmpty(t, fileChanges[0]["changes"])
 }

@@ -76,3 +76,32 @@ var statusCmd = &cobra.Command{
 		}
 	},
 }
+
+var diffCmd = &cobra.Command{
+	Use:     "diff",
+	Short:   "show diff for a commit",
+	Aliases: []string{"df"},
+	Example: `stick diff --repo-path <directory> --commit <commit_hash>`,
+	Run: func(cmd *cobra.Command, args []string) {
+		repoPath, _ := cmd.Flags().GetString("repo-path")
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+
+		if repoPath == "current" {
+			repoPath, _ = os.Getwd()
+		}
+
+		if jsonOutput {
+			jsonBytes, err := vc.DiffJSON(repoPath)
+			if err != nil {
+				log.Error(fmt.Errorf("%w", err))
+				os.Exit(1)
+			}
+			fmt.Println(string(jsonBytes))
+		} else {
+			err := vc.Diff(repoPath)
+			if err != nil {
+				log.Error(fmt.Errorf("%w", err))
+			}
+		}
+	},
+}

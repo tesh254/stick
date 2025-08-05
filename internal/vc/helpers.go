@@ -1,9 +1,12 @@
 package vc
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -17,6 +20,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/transport/ssh"
 	"github.com/go-git/go-git/v6/utils/merkletrie"
 	"github.com/olekukonko/tablewriter"
+	"github.com/sergi/go-diff/diffmatchpatch"
 	"golang.org/x/term"
 )
 
@@ -163,10 +167,10 @@ func printChange(change ChangeRecord) {
 
 	if change.Type == git.Renamed {
 		// Display rename as "oldname -> newname"
-		statusColor.Printf("  %s %s -> %s\n", statusText, change.Extra, change.File)
+		statusColor.Printf("  %s %s -> %s", statusText, change.Extra, change.File)
 	} else {
 		// Use original formatting for non-renamed files
-		statusColor.Printf("  %s %s\n", statusText, change.File)
+		statusColor.Printf("  %s %s", statusText, change.File)
 	}
 }
 
@@ -347,4 +351,174 @@ func printTable(data [][]string) {
 	table.Header(data[0])
 	table.Bulk(data[1:])
 	table.Render()
+}
+
+func getWorktreeChanges(repoPath string) ([]FileChange, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return nil, err
+	}
+
+	ref, err := repo.Head()
+	if err != nil {
+		return nil, err
+	}
+
+	commit, err := repo.CommitObject(ref.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	headTree, err := commit.Tree()
+	if err != nil {
+		return nil, err
+	}
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		return nil, err
+	}
+
+	status, err := wt.Status()
+	if err != nil {
+		return nil, err
+	}
+
+	var fileChanges []FileChange
+	var filenames []string
+	for f := range status {
+		filenames = append(filenames, f)
+	}
+	sort.Strings(filenames)
+
+	dmp := diffmatchpatch.New()
+
+	for _, file := range filenames {
+		stat := status[file]
+		if stat.Worktree == git.Unmodified {
+			continue
+		}
+
+		var oldContent, newContent string
+		var oldBlob *object.Blob
+		entry, err := headTree.FindEntry(file)
+		if err == nil && entry != nil {
+			oldBlob, _ = object.GetBlob(repo.Storer, entry.Hash)
+			if oldBlob != nil {
+				reader, err := oldBlob.Reader()
+				if err == nil {
+					defer reader.Close()
+					bytes, err := io.ReadAll(reader)
+					if err == nil {
+						oldContent = string(bytes)
+					}
+				}
+			}
+		}
+
+		absPath := filepath.Join(wt.Filesystem.Root(), file)
+		newFileBytes, err := os.ReadFile(absPath)
+		if err != nil {
+			// File might be deleted
+			newContent = ""
+		} else {
+			newContent = string(newFileBytes)
+		}
+
+		if oldContent == newContent {
+			continue
+		}
+
+		a, b, c := dmp.DiffLinesToChars(oldContent, newContent)
+		diffs := dmp.DiffMain(a, b, false)
+		result := dmp.DiffCharsToLines(diffs, c)
+
+		var lineChanges []LineChange
+		lineNumber := 0
+		for _, diff := range result {
+			lines := strings.Split(diff.Text, "")
+			if len(lines) > 0 && len(lines[len(lines)-1]) == 0 {
+				lines = lines[:len(lines)-1]
+			}
+
+			switch diff.Type {
+			case diffmatchpatch.DiffInsert:
+				for _, line := range lines {
+					lineChanges = append(lineChanges, LineChange{
+						Line:    lineNumber,
+						Type:    "added",
+						Content: line,
+					})
+					lineNumber++
+				}
+			case diffmatchpatch.DiffDelete:
+				for _, line := range lines {
+					lineChanges = append(lineChanges, LineChange{
+						Line:    lineNumber,
+						Type:    "deleted",
+						Content: line,
+					})
+				}
+			case diffmatchpatch.DiffEqual:
+				lineNumber += len(lines)
+			}
+		}
+
+		if len(lineChanges) > 0 {
+			fileChanges = append(fileChanges, FileChange{
+				Path:    file,
+				Status:  getChangeStatusFromGitStatus(stat.Worktree),
+				Changes: lineChanges,
+			})
+		}
+	}
+
+	return fileChanges, nil
+}
+
+func getChangeStatusFromGitStatus(s git.StatusCode) string {
+	switch s {
+	case git.Added, git.Untracked:
+		return "added"
+	case git.Deleted:
+		return "deleted"
+	case git.Modified:
+		return "modified"
+	case git.Renamed:
+		return "renamed"
+	default:
+		return "unknown"
+	}
+}
+
+func printWorktreeChanges(fileChanges []FileChange) {
+	for _, fc := range fileChanges {
+		color.New(color.Bold).Printf("diff --git %s %s", fc.Path, fc.Path)
+		color.Yellow("--- %s", fc.Path)
+		color.Yellow("+++ %s", fc.Path)
+		for _, change := range fc.Changes {
+			switch change.Type {
+			case "added":
+				color.Green("+%s", change.Content)
+			case "deleted":
+				color.Red("-%s", change.Content)
+			}
+		}
+		fmt.Println()
+	}
+}
+
+func getOptimizedDiffJSON(changes object.Changes) (string, error) {
+	fileChanges, err := buildFileChanges(changes)
+	if err != nil {
+		return "", fmt.Errorf("failed to build file changes: %w", err)
+	}
+
+	// Marshal to JSON. By default, it's compact.
+	jsonBytes, err := json.Marshal(fileChanges)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal file changes to JSON: %w", err)
+	}
+
+	return string(jsonBytes), nil
 }
