@@ -7,20 +7,53 @@ import (
 	"github.com/spf13/viper"
 )
 
+// ProviderConfig represents the configuration for a single AI provider.
+type ProviderConfig struct {
+	APIKey string `mapstructure:"apiKey"`
+	Model  string `mapstructure:"model"`
+}
+
+// maskAPIKey is a helper function to mask the API key for printing.
+func maskAPIKey(apiKey string) string {
+	if len(apiKey) > 4 {
+		return "********" + apiKey[len(apiKey)-4:]
+	}
+	return "********"
+}
+
+// String returns a string representation of ProviderConfig with APIKey masked.
+func (pc ProviderConfig) String() string {
+	return fmt.Sprintf("  Model: %s\n  APIKey: %s", pc.Model, maskAPIKey(pc.APIKey))
+}
+
 // StickConfig holds configuration for the application.
 type StickConfig struct {
-	Name          string
-	SelectedModel string
-	APIKey        string
+	Name            string                    `mapstructure:"name"`
+	DefaultProvider string                    `mapstructure:"defaultProvider"`
+	Providers       map[string]ProviderConfig `mapstructure:"providers"`
+}
+
+// String returns a string representation of StickConfig.
+func (sc StickConfig) String() string {
+	s := fmt.Sprintf("Name: %s\nDefault Provider: %s\nProviders:\n", sc.Name, sc.DefaultProvider)
+	for name, provider := range sc.Providers {
+		s += fmt.Sprintf("  %s:\n%s\n", name, provider.String())
+	}
+	return s
+}
+
+// GetConfig returns the entire StickConfig object.
+func GetConfig() *StickConfig {
+	return NewStickConfig()
 }
 
 // NewStickConfig is a constructor for StickConfig that reads from Viper.
 func NewStickConfig() *StickConfig {
-	return &StickConfig{
-		Name:          viper.GetString("name"),
-		SelectedModel: viper.GetString("selected_model"),
-		APIKey:        viper.GetString("api_key"),
+	var config StickConfig
+	if err := viper.Unmarshal(&config); err != nil {
+		fmt.Printf("Error unmarshalling config: %s", err)
 	}
+	return &config
 }
 
 func writeViperConfig() error {
@@ -35,29 +68,39 @@ func writeViperConfig() error {
 	return viper.WriteConfigAs(configFile)
 }
 
-// SetAPIKey saves the API key to the config file.
-func SetAPIKey(apiKey string) error {
-	viper.Set("api_key", apiKey)
+// Set saves a key-value pair to the config file.
+func Set(key string, value interface{}) error {
+	viper.Set(key, value)
 	return writeViperConfig()
 }
 
-// SetSelectedModel saves the selected model to the config file.
-func SetSelectedModel(model string) error {
-	viper.Set("selected_model", model)
-	return writeViperConfig()
+// GetString returns a string value from the config file.
+func GetString(key string) string {
+	return viper.GetString(key)
 }
 
-// GetAPIKey returns the API key from the config file.
-func GetAPIKey() string {
-	return viper.GetString("api_key")
-}
+// GetProviderConfig returns the configuration for a specific provider.
+func GetProviderConfig(provider ...string) (*ProviderConfig, string, error) {
+	var providerName string
+	if len(provider) > 0 && provider[0] != "" {
+		providerName = provider[0]
+	} else {
+		providerName = viper.GetString("defaultProvider")
+	}
 
-// GetSelectedModel returns the selected model from the config file.
-func GetSelectedModel() string {
-	return viper.GetString("selected_model")
-}
+	if providerName == "" {
+		return nil, "", fmt.Errorf("no AI provider specified and no default provider is set")
+	}
 
-// GetName returns the name from the config file.
-func GetName() string {
-	return viper.GetString("name")
+	var providers map[string]ProviderConfig
+	if err := viper.UnmarshalKey("providers", &providers); err != nil {
+		return nil, "", fmt.Errorf("error unmarshalling providers config: %w", err)
+	}
+
+	config, ok := providers[providerName]
+	if !ok {
+		return nil, "", fmt.Errorf("configuration for provider '%s' not found", providerName)
+	}
+
+	return &config, providerName, nil
 }

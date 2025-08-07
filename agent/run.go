@@ -4,10 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+
+	"github.com/tesh254/stick/internal/config"
 )
 
-func RunAgent(prompt string) {
-	client := Init()
+func RunAgent(prompt string, provider string) {
+	client, err := NewAIClient(provider)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	providerConfig, _, err := config.GetProviderConfig(provider)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	messages := []Message{
 		{
 			Role:    "system",
@@ -40,7 +51,7 @@ func RunAgent(prompt string) {
 	}
 
 	req := ChatCompletionRequest{
-		Model:     "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+		Model:     providerConfig.Model,
 		Messages:  messages,
 		Tools:     tools,
 		MaxTokens: 4096,

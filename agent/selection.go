@@ -13,6 +13,12 @@ import (
 	"github.com/tesh254/stick/internal/constants"
 )
 
+type providerInfo struct {
+	id          string
+	name        string
+	description string
+}
+
 type modelInfo struct {
 	id           string
 	name         string
@@ -22,39 +28,30 @@ type modelInfo struct {
 	description  string
 }
 
-var models = []modelInfo{
-	{
-		id:           "qwen/qwen3-coder:free",
-		name:         "Qwen3 Coder (Free)",
-		inputCostPM:  0,
-		outputCostPM: 0,
-		context:      262144,
-		description:  `optimised for agentic coding tasks such as function calling, tool use and longer context reasoning over repos`,
+var providers = []providerInfo{
+	{id: "together", name: "Together AI", description: "A cloud provider for running, fine-tuning, and serving large AI models."},
+	{id: "anthropic", name: "Anthropic", description: "AI safety and research company creating reliable, interpretable, and steerable AI systems."},
+	{id: "google", name: "Google", description: "A suite of generative AI models developed by Google."},
+	{id: "openai", name: "OpenAI", description: "An AI research and deployment company."},
+	{id: "openrouter", name: "OpenRouter", description: "A unified API for accessing and using various large language models."},
+}
+
+var models = map[string][]modelInfo{
+	"together": {
+		{id: "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8", name: "Qwen3 Coder", inputCostPM: 0.2, outputCostPM: 0.80, context: 262144, description: "Optimised for agentic coding tasks."},
 	},
-	{
-		id:           "qwen/qwen3-coder",
-		name:         "Qwen3 Coder",
-		inputCostPM:  0.2,
-		outputCostPM: 0.80,
-		context:      262144,
-		description:  `optimised for agentic coding tasks such as function calling, tool use and longer context reasoning over repos`,
+	"anthropic": {
+		{id: "claude-3-opus-20240229", name: "Claude 3 Opus", inputCostPM: 15.00, outputCostPM: 75.00, context: 200000, description: "Most powerful model for highly complex tasks."},
 	},
-	// {
-	// 	id:           "google/gemini-2.0-flash-exp:free",
-	// 	name:         "Google: Gemini 2.0 Flash Experimental (free)",
-	// 	inputCostPM:  0,
-	// 	outputCostPM: 0,
-	// 	context:      1048576,
-	// 	description:  `faster time to first token and delivers more seamless and robust agentic experience`,
-	// },
-	// {
-	// 	id:           "openrouter/horizon-beta",
-	// 	name:         "OpenRouter: Horizon Beta",
-	// 	inputCostPM:  0,
-	// 	outputCostPM: 0,
-	// 	context:      256000,
-	// 	description:  `faster time to first token and delivers more seamless and robust agentic experience`,
-	// },
+	"google": {
+		{id: "gemini/gemini-1.5-pro-latest", name: "Gemini 1.5 Pro", inputCostPM: 7.00, outputCostPM: 21.00, context: 1000000, description: "Most capable generative model."},
+	},
+	"openai": {
+		{id: "gpt-4-turbo", name: "GPT-4 Turbo", inputCostPM: 10.00, outputCostPM: 30.00, context: 128000, description: "The latest GPT-4 model with improved instruction-following."},
+	},
+	"openrouter": {
+		{id: "openrouter/auto", name: "Auto (best-in-class)", inputCostPM: 1.00, outputCostPM: 1.00, context: 128000, description: "Automatically selects the best model for your request."},
+	},
 }
 
 var (
@@ -63,6 +60,14 @@ var (
 	statusMessageStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#04B575"})
 )
+
+func (i providerInfo) FilterValue() string {
+	return i.name
+}
+
+func (i providerInfo) Title() string {
+	return i.name
+}
 
 func (i modelInfo) Name() string {
 	return i.name
@@ -107,47 +112,72 @@ func (d itemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 }
 
 func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
-	mi, ok := listItem.(modelInfo)
-	if !ok {
-		return
-	}
+	switch item := listItem.(type) {
+	case providerInfo:
+		title := item.name
+		desc := item.description
 
-	title := mi.name
-	desc := mi.description
-	costs := fmt.Sprintf("Input: $%.2f/M, Output: $%.2f/M", mi.inputCostPM, mi.outputCostPM)
-	context := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(fmt.Sprintf("Context: %d", mi.context))
+		if index == m.Index() {
+			title = lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Render(title)
+		}
 
-	if index == m.Index() {
-		title = lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Render(title)
-	}
+		itemStr := fmt.Sprintf("%s\n  %s", title, desc)
 
-	itemStr := fmt.Sprintf("%s\n  %s\n  %s | %s", title, desc, costs, context)
+		if index == m.Index() {
+			style := lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder(), false, false, false, true).
+				BorderForeground(lipgloss.Color("#04B575")).
+				PaddingLeft(2)
+			fmt.Fprint(w, style.Render(itemStr))
+		} else {
+			style := lipgloss.NewStyle().PaddingLeft(3)
+			fmt.Fprint(w, style.Render(itemStr))
+		}
+	case modelInfo:
+		mi, ok := listItem.(modelInfo)
+		if !ok {
+			return
+		}
 
-	if index == m.Index() {
-		style := lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), false, false, false, true).
-			BorderForeground(lipgloss.Color("#04B575")).
-			PaddingLeft(2)
-		fmt.Fprint(w, style.Render(itemStr))
-	} else {
-		style := lipgloss.NewStyle().PaddingLeft(3)
-		fmt.Fprint(w, style.Render(itemStr))
+		title := mi.name
+		desc := mi.description
+		costs := fmt.Sprintf("Input: $%.2f/M, Output: $%.2f/M", mi.inputCostPM, mi.outputCostPM)
+		context := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(fmt.Sprintf("Context: %d", mi.context))
+
+		if index == m.Index() {
+			title = lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Render(title)
+		}
+
+		itemStr := fmt.Sprintf("%s\n  %s\n  %s | %s", title, desc, costs, context)
+
+		if index == m.Index() {
+			style := lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder(), false, false, false, true).
+				BorderForeground(lipgloss.Color("#04B575")).
+				PaddingLeft(2)
+			fmt.Fprint(w, style.Render(itemStr))
+		} else {
+			style := lipgloss.NewStyle().PaddingLeft(3)
+			fmt.Fprint(w, style.Render(itemStr))
+		}
 	}
 }
 
 type sessionState int
 
 const (
-	modelSelection sessionState = iota
+	providerSelection sessionState = iota
+	modelSelection
 	apiKeyInput
 )
 
 type model struct {
-	list         list.Model
-	input        textinput.Model
-	state        sessionState
-	selectedItem modelInfo
-	quitting     bool
+	list             list.Model
+	input            textinput.Model
+	state            sessionState
+	selectedProvider providerInfo
+	selectedModel    modelInfo
+	quitting         bool
 }
 
 func (m *model) Init() tea.Cmd {
@@ -167,23 +197,36 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case tea.KeyEnter:
 			switch m.state {
+			case providerSelection:
+				i, ok := m.list.SelectedItem().(providerInfo)
+				if ok {
+					m.selectedProvider = i
+					m.state = modelSelection
+					items := make([]list.Item, len(models[i.id]))
+					for j, mi := range models[i.id] {
+						items[j] = mi
+					}
+					m.list.SetItems(items)
+				}
 			case modelSelection:
 				i, ok := m.list.SelectedItem().(modelInfo)
 				if ok {
-					m.selectedItem = i
+					m.selectedModel = i
 					m.state = apiKeyInput
 					m.input.Focus()
 					return m, textinput.Blink
 				}
 			case apiKeyInput:
 				apiKey := m.input.Value()
-				if err := config.SetAPIKey(apiKey); err != nil {
-					// In a real app, you might want to display this error to the user.
-					// For now, we'll just quit.
+				if err := config.Set(fmt.Sprintf("providers.%s.apiKey", m.selectedProvider.id), apiKey); err != nil {
 					m.quitting = true
 					return m, tea.Quit
 				}
-				if err := config.SetSelectedModel(m.selectedItem.id); err != nil {
+				if err := config.Set(fmt.Sprintf("providers.%s.model", m.selectedProvider.id), m.selectedModel.id); err != nil {
+					m.quitting = true
+					return m, tea.Quit
+				}
+				if err := config.Set("defaultProvider", m.selectedProvider.id); err != nil {
 					m.quitting = true
 					return m, tea.Quit
 				}
@@ -194,12 +237,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	switch m.state {
-	case modelSelection:
-		m.list, cmd = m.list.Update(msg)
-	case apiKeyInput:
-		m.input, cmd = m.input.Update(msg)
-	}
+	m.list, cmd = m.list.Update(msg)
 	return m, cmd
 }
 
@@ -211,26 +249,29 @@ func (m *model) View() string {
 	switch m.state {
 	case apiKeyInput:
 		return appStyle.Render(fmt.Sprintf(
-			"Enter your OpenRouter API Key for %s: \n%s \n%s",
-			m.selectedItem.name,
+			"Enter your %s API Key for %s: \n%s \n%s",
+			m.selectedProvider.name,
+			m.selectedModel.name,
 			m.input.View(),
 			statusMessageStyle.Render("(press enter to save)"),
 		))
+	case modelSelection:
+		return m.list.View()
 	default:
 		green := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
 		asciiArt := green.Render(constants.STICK_ASCII)
 
-		availableModelsStyle := lipgloss.NewStyle().
+		availableProvidersStyle := lipgloss.NewStyle().
 			Background(lipgloss.Color("#04B575")).
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Padding(0, 1).
 			MarginBottom(1)
-		availableModelsLabel := availableModelsStyle.Render("Available Models")
+		availableProvidersLabel := availableProvidersStyle.Render("Available Providers")
 
 		return appStyle.Render(
 			lipgloss.JoinVertical(lipgloss.Left,
 				asciiArt,
-				availableModelsLabel,
+				availableProvidersLabel,
 				m.list.View(),
 			),
 		)
@@ -238,9 +279,9 @@ func (m *model) View() string {
 }
 
 func SelectModel() {
-	items := make([]list.Item, len(models))
-	for i, mi := range models {
-		items[i] = mi
+	items := make([]list.Item, len(providers))
+	for i, p := range providers {
+		items[i] = p
 	}
 
 	l := list.New(items, itemDelegate{}, 0, 0)
@@ -252,7 +293,7 @@ func SelectModel() {
 	l.Styles.HelpStyle = lipgloss.NewStyle().Margin(1, 0)
 
 	ti := textinput.New()
-	ti.Placeholder = "sk-or-..."
+	ti.Placeholder = "sk-..."
 	ti.CharLimit = 100
 	ti.Width = 50
 	ti.EchoMode = textinput.EchoPassword
@@ -261,7 +302,7 @@ func SelectModel() {
 	m := &model{
 		list:  l,
 		input: ti,
-		state: modelSelection,
+		state: providerSelection,
 	}
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
@@ -273,8 +314,8 @@ func SelectModel() {
 	}
 
 	if fm, ok := finalModel.(*model); ok {
-		if fm.selectedItem.id != "" {
-			fmt.Printf("%s ", statusMessageStyle.Render(fmt.Sprintf("✓ Selected model set to: %s", fm.selectedItem.name)))
+		if fm.selectedModel.id != "" {
+			fmt.Printf("%s ", statusMessageStyle.Render(fmt.Sprintf("✓ Selected model set to: %s", fm.selectedModel.name)))
 		}
 	}
 }

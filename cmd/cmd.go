@@ -165,7 +165,16 @@ func init() {
 	diffCmd.Flags().Bool("json", false, "output in json format")
 
 	// agent commands
+	agentCmd.Flags().String("provider", "together", "The AI provider to use (e.g., anthropic, google, openai, openrouter)")
 	agentCmd.AddCommand(agentInitCmd)
+
+	// ai flags and commands
+	setCmd.Flags().String("provider", "", "The AI provider to use (e.g., anthropic, google, openai, openrouter)")
+	setCmd.Flags().String("apiKey", "", "The API key for the selected provider")
+	setCmd.Flags().String("model", "", "The default model to use for the selected provider")
+
+	aiCmd.AddCommand(setCmd)
+	configCmd.AddCommand(aiCmd)
 
 	stickCmd.AddCommand(buildInfoCmd)
 	stickCmd.AddCommand(versionCmd)
@@ -174,4 +183,5 @@ func init() {
 	stickCmd.AddCommand(statusCmd)
 	stickCmd.AddCommand(diffCmd)
 	stickCmd.AddCommand(agentCmd)
+	stickCmd.AddCommand(configCmd)
 }
