@@ -34,27 +34,27 @@ var models = []modelInfo{
 	{
 		id:           "qwen/qwen3-coder",
 		name:         "Qwen3 Coder",
-		inputCostPM:  0.30,
-		outputCostPM: 1.20,
+		inputCostPM:  0.2,
+		outputCostPM: 0.80,
 		context:      262144,
 		description:  `optimised for agentic coding tasks such as function calling, tool use and longer context reasoning over repos`,
 	},
-	{
-		id:           "google/gemini-2.0-flash-exp:free",
-		name:         "Google: Gemini 2.0 Flash Experimental (free)",
-		inputCostPM:  0,
-		outputCostPM: 0,
-		context:      1048576,
-		description:  `faster time to first token and delivers more seamless and robust agentic experience`,
-	},
-	{
-		id:           "openrouter/horizon-beta",
-		name:         "OpenRouter: Horizon Beta",
-		inputCostPM:  0,
-		outputCostPM: 0,
-		context:      256000,
-		description:  `faster time to first token and delivers more seamless and robust agentic experience`,
-	},
+	// {
+	// 	id:           "google/gemini-2.0-flash-exp:free",
+	// 	name:         "Google: Gemini 2.0 Flash Experimental (free)",
+	// 	inputCostPM:  0,
+	// 	outputCostPM: 0,
+	// 	context:      1048576,
+	// 	description:  `faster time to first token and delivers more seamless and robust agentic experience`,
+	// },
+	// {
+	// 	id:           "openrouter/horizon-beta",
+	// 	name:         "OpenRouter: Horizon Beta",
+	// 	inputCostPM:  0,
+	// 	outputCostPM: 0,
+	// 	context:      256000,
+	// 	description:  `faster time to first token and delivers more seamless and robust agentic experience`,
+	// },
 }
 
 var (

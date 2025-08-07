@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
-	"github.com/tesh254/stick/internal/agent"
+	"github.com/tesh254/stick/agent"
 )
 
 var agentCmd = &cobra.Command{
@@ -12,7 +10,7 @@ var agentCmd = &cobra.Command{
 	Short:   "interact with ai features",
 	Example: `stick agent`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("this is where ai stuff will run")
+		agent.RunAgent("print the current directory")
 	},
 }
 
