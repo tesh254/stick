@@ -11,24 +11,24 @@ import (
 	"time"
 )
 
-// TogetherClient is a client for the Together AI API.
-type TogetherClient struct {
+// PlatformClient is a generic client for AI services that are compatible with the OpenAI API.
+type PlatformClient struct {
 	Endpoint   string
 	APIKey     string
 	HTTPClient *http.Client
 }
 
-// NewTogetherClient creates a new TogetherClient.
-func NewTogetherClient(apiKey string) (*TogetherClient, error) {
-	return &TogetherClient{
-		Endpoint:   "https://api.together.xyz/v1/chat/completions",
+// NewPlatformClient creates a new PlatformClient.
+func NewPlatformClient(endpoint, apiKey string) *PlatformClient {
+	return &PlatformClient{
+		Endpoint:   endpoint,
 		APIKey:     apiKey,
 		HTTPClient: &http.Client{Timeout: 30 * time.Second},
-	}, nil
+	}
 }
 
-// Create sends a chat completion request to the Together AI API.
-func (c *TogetherClient) Create(req ChatCompletionRequest) (*ChatCompletionResponse, error) {
+// Create sends a chat completion request to the specified endpoint.
+func (c *PlatformClient) Create(req ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	jsonBody, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -61,8 +61,8 @@ func (c *TogetherClient) Create(req ChatCompletionRequest) (*ChatCompletionRespo
 	return &chatResp, nil
 }
 
-// MessageStream sends a streaming chat completion request to the Together AI API.
-func (c *TogetherClient) MessageStream(req ChatCompletionRequest) (chan string, error) {
+// Stream sends a streaming chat completion request to the specified endpoint.
+func (c *PlatformClient) Stream(req ChatCompletionRequest) (chan string, error) {
 	req.Stream = true
 
 	body, err := json.Marshal(req)
@@ -108,7 +108,7 @@ func (c *TogetherClient) MessageStream(req ChatCompletionRequest) (chan string, 
 					} `json:"choices"`
 				}
 
-				if err := json.Unmarshal([]byte(data), &event); err != nil {
+				if err := json.Unmarshal([]byte(data), &event); err == nil {
 					if len(event.Choices) > 0 && event.Choices[0].Delta.Content != "" {
 						ch <- event.Choices[0].Delta.Content
 					}

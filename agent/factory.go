@@ -13,18 +13,16 @@ func NewAIClient(provider ...string) (AIClient, error) {
 		return nil, err
 	}
 
-	switch providerName {
-	case "together":
-		return NewTogetherClient(providerConfig.APIKey)
-	// case "anthropic":
-	// 	return NewAnthropicClient(providerConfig.APIKey)
-	// case "google":
-	// 	return NewGoogleClient(providerConfig.APIKey)
-	// case "openai":
-	// 	return NewOpenAIClient(providerConfig.APIKey)
-	// case "openrouter":
-	// 	return NewOpenRouterClient(providerConfig.APIKey)
-	default:
+	endpoints := map[string]string{
+		"together":   "https://api.together.xyz/v1/chat/completions",
+		"openai":     "https://api.openai.com/v1/chat/completions",
+		"openrouter": "https://openrouter.ai/api/v1/chat/completions",
+		"atlascloud": "https://api.atlascloud.ai/v1/chat/completions",
+	}
+
+	if endpoint, ok := endpoints[providerName]; ok {
+		return NewPlatformClient(endpoint, providerConfig.APIKey), nil
+	} else {
 		return nil, fmt.Errorf("unsupported AI provider: %s", providerName)
 	}
 }

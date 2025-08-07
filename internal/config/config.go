@@ -14,7 +14,7 @@ type ProviderConfig struct {
 }
 
 // maskAPIKey is a helper function to mask the API key for printing.
-func maskAPIKey(apiKey string) string {
+func MaskAPIKey(apiKey string) string {
 	if len(apiKey) > 4 {
 		return "********" + apiKey[len(apiKey)-4:]
 	}
@@ -23,7 +23,7 @@ func maskAPIKey(apiKey string) string {
 
 // String returns a string representation of ProviderConfig with APIKey masked.
 func (pc ProviderConfig) String() string {
-	return fmt.Sprintf("  Model: %s\n  APIKey: %s", pc.Model, maskAPIKey(pc.APIKey))
+	return fmt.Sprintf("  Model: %s\n  APIKey: %s", pc.Model, MaskAPIKey(pc.APIKey))
 }
 
 // StickConfig holds configuration for the application.

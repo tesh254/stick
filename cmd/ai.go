@@ -13,7 +13,11 @@ var aiCmd = &cobra.Command{
 	Long:  `Configure AI settings such as the provider, model, and API key.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		userConfig := config.GetConfig()
-		fmt.Println(userConfig.Providers)
+		for provider, configuration := range userConfig.Providers {
+			fmt.Println(provider)
+			fmt.Printf("    model: %s\n", configuration.Model)
+			fmt.Printf("    apiKey: %s\n", config.MaskAPIKey(configuration.APIKey))
+		}
 	},
 }
 

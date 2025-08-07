@@ -9,9 +9,9 @@ import (
 )
 
 func TestMaskAPIKey(t *testing.T) {
-	assert.Equal(t, "********ikey", maskAPIKey("someapikey"))
-	assert.Equal(t, "********", maskAPIKey("key"))
-	assert.Equal(t, "********", maskAPIKey(""))
+	assert.Equal(t, "********ikey", MaskAPIKey("someapikey"))
+	assert.Equal(t, "********", MaskAPIKey("key"))
+	assert.Equal(t, "********", MaskAPIKey(""))
 }
 
 func TestProviderConfig_String(t *testing.T) {

@@ -34,6 +34,7 @@ var providers = []providerInfo{
 	{id: "google", name: "Google", description: "A suite of generative AI models developed by Google."},
 	{id: "openai", name: "OpenAI", description: "An AI research and deployment company."},
 	{id: "openrouter", name: "OpenRouter", description: "A unified API for accessing and using various large language models."},
+	{id: "atlascloud", name: "Atlas Cloud", description: "A platform for running and fine-tuning AI models."},
 }
 
 var models = map[string][]modelInfo{
@@ -51,6 +52,9 @@ var models = map[string][]modelInfo{
 	},
 	"openrouter": {
 		{id: "openrouter/auto", name: "Auto (best-in-class)", inputCostPM: 1.00, outputCostPM: 1.00, context: 128000, description: "Automatically selects the best model for your request."},
+	},
+	"atlascloud": {
+		{id: "atlascloud/llama-3-8b-instruct", name: "Llama 3 8B Instruct", inputCostPM: 0.2, outputCostPM: 0.2, context: 8192, description: "The most capable small model from Meta."},
 	},
 }
 
