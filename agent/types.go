@@ -8,8 +8,9 @@ type Message struct {
 
 // Tool represents a tool (function) that the AI can call
 type Tool struct {
-	Type     string    `json:"type"`
-	Function *Function `json:"function,omitempty"`
+	Type     string                 `json:"type"`
+	Function *Function              `json:"function,omitempty"`
+	Example  map[string]interface{} `json:"example,omitempty"`
 }
 
 // Function represents the actual function details
@@ -26,10 +27,23 @@ type Parameters struct {
 	Required   []string            `json:"required,omitempty"`
 }
 
+type Prop struct {
+	Type        string   `json:"type"`
+	Enum        []string `json:"enum,omitempty"`
+	Description string   `json:"description"`
+}
+
+type Item struct {
+	Type       string          `json:"type"`
+	Properties map[string]Prop `json:"properties"`
+	Required   []string        `json:"required,omitempty"`
+}
+
 // Property represents a single property of a parameter
 type Property struct {
 	Type        string `json:"type"`
 	Description string `json:"description"`
+	Items       Item   `json:"items,omitempty"`
 }
 
 // ChatCompletionRequest represents a request to the chat completions API

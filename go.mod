@@ -21,6 +21,7 @@ require (
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect
+	github.com/tesh254/ffs v1.0.9 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 )
 
