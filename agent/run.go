@@ -3,34 +3,12 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/tesh254/stick/internal/config"
 )
 
-func RunAgent(prompt string, provider string) {
-	client, err := NewAIClient(provider)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	providerConfig, _, err := config.GetProviderConfig(provider)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	messages := []Message{
-		{
-			Role:    "system",
-			Content: systemPrompt,
-		},
-		{
-			Role:    "user",
-			Content: prompt,
-		},
-	}
-
-	tools := []Tool{
+func getTools() []Tool {
+	return []Tool{
 		{
 			Type: "function",
 			Function: &Function{
@@ -195,25 +173,54 @@ func RunAgent(prompt string, provider string) {
 			},
 		},
 	}
+}
+
+func RunAgent(prompt string, provider string, responseChan chan string) {
+	defer close(responseChan)
+
+	client, err := NewAIClient(provider)
+	if err != nil {
+		responseChan <- fmt.Sprintf("Error creating AI client: %v", err)
+		return
+	}
+
+	providerConfig, _, err := config.GetProviderConfig(provider)
+	if err != nil {
+		responseChan <- fmt.Sprintf("Error getting provider config: %v", err)
+		return
+	}
+
+	messages := []Message{
+		{
+			Role:    "system",
+			Content: systemPrompt,
+		},
+		{
+			Role:    "user",
+			Content: prompt,
+		},
+	}
 
 	req := ChatCompletionRequest{
 		Model:     providerConfig.Model,
 		Messages:  messages,
-		Tools:     tools,
+		Tools:     getTools(),
 		MaxTokens: 4096,
 	}
 
 	resp, err := client.Create(req)
 	if err != nil {
-		log.Fatal(err)
+		responseChan <- fmt.Sprintf("Error creating chat completion: %v", err)
+		return
 	}
 
 	// Print the response content
 	respBytes, err := json.MarshalIndent(resp, "", "  ")
 	if err != nil {
-		log.Fatal(err)
+		responseChan <- fmt.Sprintf("Error marshalling response: %v", err)
+		return
 	}
-	fmt.Println("Response:", string(respBytes))
+	responseChan <- string(respBytes)
 
 	// Handle any tool calls in the response
 	if len(resp.Choices) > 0 && len(resp.Choices[0].Message.ToolCalls) > 0 {
@@ -221,14 +228,16 @@ func RunAgent(prompt string, provider string) {
 			// Unmarshal the arguments from the tool call
 			var toolArgs map[string]interface{}
 			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &toolArgs); err != nil {
-				log.Fatalf("Failed to unmarshal tool arguments: %v", err)
+				responseChan <- fmt.Sprintf("Failed to unmarshal tool arguments: %v", err)
+				continue
 			}
 
 			result, err := ExecuteTool(toolCall.Function.Name, toolArgs)
 			if err != nil {
-				log.Fatal(err)
+				responseChan <- fmt.Sprintf("Error executing tool: %v", err)
+				continue
 			}
-			fmt.Println("Tool Result:", result)
+			responseChan <- fmt.Sprintf("Tool Result: %s", result)
 		}
 	}
 }

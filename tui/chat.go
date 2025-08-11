@@ -3,19 +3,17 @@ package tui
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-isatty"
 	"github.com/tesh254/ffs/core"
+	"github.com/tesh254/stick/agent"
 	"github.com/tesh254/stick/internal/constants"
 )
 
@@ -25,6 +23,9 @@ const (
 	dropdownHeight = 15
 	maxTreeDepth   = 5
 )
+
+type agentResponseMsg string
+type agentDoneMsg struct{}
 
 type Model struct {
 	viewport            viewport.Model
@@ -39,6 +40,36 @@ type Model struct {
 	dirTree             *core.DirectoryTree
 	fullCommandItems    []list.Item
 	inputHeight         int
+	provider            string
+	agentResponses      chan string
+}
+
+func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *Model {
+	ti := textarea.New()
+	ti.Prompt = ""
+	ti.Placeholder = ""
+	ti.Focus()
+	ti.CharLimit = 0
+	ti.ShowLineNumbers = false
+	ti.SetHeight(minInputHeight)
+	ti.SetValue("")
+
+	vp := viewport.New(0, 0)
+
+	m := &Model{
+		input:          ti,
+		viewport:       vp,
+		messages:       []string{},
+		currentDir:     currentDir,
+		dirTree:        dirTree,
+		inputHeight:    minInputHeight,
+		provider:       provider,
+		agentResponses: make(chan string),
+	}
+
+	m.initCommandList()
+	m.updateFileList()
+	return m
 }
 
 var purpleText = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
@@ -59,10 +90,17 @@ func (m *Model) toggleLoading() {
 	m.loading = !m.loading
 }
 
-type loadingDoneMsg struct{}
+func (m *Model) waitForAgentResponse() tea.Cmd {
+	return func() tea.Msg {
+		response, ok := <-m.agentResponses
+		if !ok {
+			return agentDoneMsg{}
+		}
+		return agentResponseMsg(response)
+	}
+}
 
 func (m *Model) Init() tea.Cmd {
-	// Add ASCII art to messages to ensure it persists
 	m.addMessage("\n\n\n" + constants.STICK_ASCII)
 	return tea.Batch(textarea.Blink, m.input.Focus())
 }
@@ -86,6 +124,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateViewportContent()
 		return m, nil
 
+	case agentResponseMsg:
+		m.addMessage("agent: " + string(msg))
+		return m, m.waitForAgentResponse()
+	case agentDoneMsg:
+		m.loading = false
+		m.addMessage("System: Run complete.")
+		m.input.Focus()
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.loading {
 			if msg.String() == "ctrl+c" {
@@ -107,7 +154,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lastSlashIndex := strings.LastIndex(text, "/")
 		lastAtIndex := strings.LastIndex(text, "@")
 
-		// If an @ symbol is present, it's a file path, not a command.
 		isFileTrigger := lastAtIndex != -1
 		isCommandTrigger := !isFileTrigger && lastSlashIndex != -1
 
@@ -337,12 +383,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.viewport, vpCmd = m.viewport.Update(msg)
 		return m, tea.Batch(inputCmd, listCmd, vpCmd)
-
-	case loadingDoneMsg:
-		m.loading = false
-		m.addMessage("System: Run complete.")
-		m.input.Focus()
-		return m, tea.Batch(m.input.Focus(), nil)
 	}
 
 	return m, cmd
@@ -361,26 +401,27 @@ func (m *Model) execute() (tea.Model, tea.Cmd) {
 		cmdName := commandParts[0]
 		switch cmdName {
 		case "/help":
-			m.addMessage("System: Help commands: /help, /run, /exit")
-		case "/run":
-			m.loading = true
-			m.addMessage("System: Running...")
-			cmd = tea.Tick(2*time.Second, func(time.Time) tea.Msg { return loadingDoneMsg{} })
+			m.addMessage("System: Help commands: /help, /exit")
 		case "/exit":
 			cmd = tea.Quit
 		default:
 			m.addMessage("System: Unknown command " + cmdName)
 		}
+		m.input.SetValue("")
+		m.inputHeight = minInputHeight
+		m.input.Focus()
+		return m, cmd
 	}
+
+	m.loading = true
+	m.addMessage("System: Running...")
+	m.runAgent(text)
 
 	m.input.SetValue("")
 	m.inputHeight = minInputHeight
 	m.input.Focus()
 
-	if cmd != nil {
-		return m, cmd
-	}
-	return m, tea.Batch(m.input.Focus(), nil)
+	return m, m.waitForAgentResponse()
 }
 
 func (m *Model) View() string {
@@ -389,13 +430,11 @@ func (m *Model) View() string {
 	if m.loading {
 		bottom = lipgloss.NewStyle().Bold(true).Render("Loading...")
 	} else {
-		// Prepend ▲ to the first non-empty line, ensuring input stays beside it
 		inputContent := strings.TrimSpace(m.input.View())
 		lines := strings.Split(inputContent, "\n")
 		if len(lines) > 0 {
 			lines[0] = "▲ " + lines[0]
 			for i := 1; i < len(lines); i++ {
-				// remove leading >
 				lines[i] = strings.TrimPrefix(lines[i], "> ")
 			}
 		}
@@ -427,10 +466,16 @@ func (m *Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, content, bottom)
 }
 
+// runAgent kicks off the agent execution in a goroutine and streams results back
+func (m *Model) runAgent(prompt string) {
+	go func() {
+		agent.RunAgent(prompt, m.provider, m.agentResponses)
+	}()
+}
+
 func (m *Model) initCommandList() {
 	items := []list.Item{
 		commandItem("/help"),
-		commandItem("/run"),
 		commandItem("/exit"),
 	}
 	m.fullCommandItems = items
@@ -528,52 +573,4 @@ func (d fileDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	}
 
 	fmt.Fprint(w, fn(str))
-}
-
-func Chat() {
-	if !isatty.IsTerminal(os.Stdout.Fd()) {
-		fmt.Println("This command requires an interactive terminal.")
-		return
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	ti := textarea.New()
-	ti.Prompt = ""
-	ti.Placeholder = ""
-	ti.Focus()
-	ti.CharLimit = 0
-	ti.ShowLineNumbers = false
-	ti.SetHeight(minInputHeight)
-	ti.SetValue("")
-
-	vp := viewport.New(0, 0)
-
-	dirTree, err := core.WorkingDirectoryTree(nil, []string{".git"})
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	m := &Model{
-		input:       ti,
-		viewport:    vp,
-		messages:    []string{},
-		currentDir:  cwd,
-		dirTree:     &dirTree,
-		inputHeight: minInputHeight,
-	}
-
-	m.initCommandList()
-	m.updateFileList()
-
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 }

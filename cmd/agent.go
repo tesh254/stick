@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 	"github.com/tesh254/stick/agent"
+	"github.com/tesh254/stick/tui"
 )
 
 var agentCmd = &cobra.Command{
@@ -11,7 +12,7 @@ var agentCmd = &cobra.Command{
 	Example: `stick agent`,
 	Run: func(cmd *cobra.Command, args []string) {
 		provider, _ := cmd.Flags().GetString("provider")
-		agent.RunAgent("print the current directory", provider)
+		tui.Run(provider)
 	},
 }
 

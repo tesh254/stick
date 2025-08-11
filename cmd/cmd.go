@@ -32,7 +32,7 @@ var stickCmd = &cobra.Command{
 			_ = cmd.Help()
 			return
 		}
-		tui.Chat()
+		tui.Run("together")
 	},
 }
 
