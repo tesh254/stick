@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,7 +22,7 @@ import (
 const (
 	minInputHeight = 3
 	maxInputHeight = 8
-	dropdownHeight = 50
+	dropdownHeight = 15
 	maxTreeDepth   = 5
 )
 
@@ -62,7 +63,7 @@ type loadingDoneMsg struct{}
 
 func (m *Model) Init() tea.Cmd {
 	// Add ASCII art to messages to ensure it persists
-	m.addMessage(constants.STICK_ASCII)
+	m.addMessage("\n\n\n" + constants.STICK_ASCII)
 	return tea.Batch(textarea.Blink, m.input.Focus())
 }
 
@@ -105,8 +106,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text := m.input.Value()
 		lastSlashIndex := strings.LastIndex(text, "/")
 		lastAtIndex := strings.LastIndex(text, "@")
-		isCommandTrigger := lastSlashIndex >= 0 && (lastAtIndex == -1 || lastSlashIndex > lastAtIndex)
-		isFileTrigger := lastAtIndex >= 0 && (lastSlashIndex == -1 || lastAtIndex > lastSlashIndex)
+
+		// If an @ symbol is present, it's a file path, not a command.
+		isFileTrigger := lastAtIndex != -1
+		isCommandTrigger := !isFileTrigger && lastSlashIndex != -1
 
 		if isCommandTrigger {
 			sliceAfterSlash := text[lastSlashIndex+1:]
@@ -133,30 +136,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.String() == "enter" && !m.showCommandDropdown && !m.showFileDropdown {
-			if text == "" {
-				return m, nil
-			}
-			m.addMessage(boldText.Render(purpleText.Render("you: ")) + text)
-			if strings.HasPrefix(text, "/") {
-				commandParts := strings.Fields(text)
-				cmdName := commandParts[0]
-				switch cmdName {
-				case "/help":
-					m.addMessage("System: Help commands: /help, /run, /exit")
-				case "/run":
-					m.loading = true
-					m.addMessage("System: Running...")
-					return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return loadingDoneMsg{} })
-				case "/exit":
-					return m, tea.Quit
-				default:
-					m.addMessage("System: Unknown command " + cmdName)
-				}
-			}
-			m.input.SetValue("")
-			m.inputHeight = minInputHeight
-			m.input.Focus()
-			return m, tea.Batch(m.input.Focus(), nil)
+			return m.execute()
 		}
 
 		if m.showCommandDropdown {
@@ -171,6 +151,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					text = prefix + item.FilterValue()
 					m.input.SetValue(text)
 					m.showCommandDropdown = false
+					return m.execute()
 				}
 				m.input.Focus()
 				return m, tea.Batch(m.input.Focus(), nil)
@@ -367,22 +348,56 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m *Model) execute() (tea.Model, tea.Cmd) {
+	text := m.input.Value()
+	if text == "" {
+		return m, nil
+	}
+	m.addMessage(boldText.Render(purpleText.Render("you: ")) + text)
+
+	var cmd tea.Cmd
+	if strings.HasPrefix(text, "/") {
+		commandParts := strings.Fields(text)
+		cmdName := commandParts[0]
+		switch cmdName {
+		case "/help":
+			m.addMessage("System: Help commands: /help, /run, /exit")
+		case "/run":
+			m.loading = true
+			m.addMessage("System: Running...")
+			cmd = tea.Tick(2*time.Second, func(time.Time) tea.Msg { return loadingDoneMsg{} })
+		case "/exit":
+			cmd = tea.Quit
+		default:
+			m.addMessage("System: Unknown command " + cmdName)
+		}
+	}
+
+	m.input.SetValue("")
+	m.inputHeight = minInputHeight
+	m.input.Focus()
+
+	if cmd != nil {
+		return m, cmd
+	}
+	return m, tea.Batch(m.input.Focus(), nil)
+}
+
 func (m *Model) View() string {
 	content := m.viewport.View()
 	bottom := ""
 	if m.loading {
 		bottom = lipgloss.NewStyle().Bold(true).Render("Loading...")
 	} else {
-		inputContent := m.input.View()
-		lines := strings.Split(inputContent, "\n")
-		for i, line := range lines {
-			lines[i] = strings.TrimPrefix(line, ">")
-			lines[i] = strings.TrimPrefix(lines[i], "> ")
-			lines[i] = strings.TrimSpace(line)
-		}
 		// Prepend ▲ to the first non-empty line, ensuring input stays beside it
+		inputContent := strings.TrimSpace(m.input.View())
+		lines := strings.Split(inputContent, "\n")
 		if len(lines) > 0 {
 			lines[0] = "▲ " + lines[0]
+			for i := 1; i < len(lines); i++ {
+				// remove leading >
+				lines[i] = strings.TrimPrefix(lines[i], "> ")
+			}
 		}
 		inputContent = strings.Join(lines, "\n")
 		inputStyle := lipgloss.NewStyle().
@@ -419,10 +434,12 @@ func (m *Model) initCommandList() {
 		commandItem("/exit"),
 	}
 	m.fullCommandItems = items
-	del := list.NewDefaultDelegate()
+	del := commandDelegate{}
 	m.commandList = list.New(append([]list.Item(nil), items...), del, 0, 0)
 	m.commandList.Title = "Commands"
 	m.commandList.SetShowHelp(false)
+	m.commandList.SetShowStatusBar(false)
+	m.commandList.SetShowPagination(false)
 }
 
 func (m *Model) updateFileList() {
@@ -434,10 +451,12 @@ func (m *Model) updateFileList() {
 	for _, child := range current.Children {
 		items = append(items, fileItem{child.Name, !child.IsFile})
 	}
-	del := list.NewDefaultDelegate()
+	del := fileDelegate{}
 	m.fileList = list.New(items, del, 0, 0)
 	m.fileList.Title = "Directory: " + current.Path
 	m.fileList.SetShowHelp(false)
+	m.fileList.SetShowStatusBar(false)
+	m.fileList.SetShowPagination(false)
 }
 
 type commandItem string
@@ -459,6 +478,57 @@ func (i fileItem) Title() string {
 }
 func (i fileItem) Description() string { return "" }
 func (i fileItem) FilterValue() string { return i.name }
+
+var (
+	itemStyle         = lipgloss.NewStyle().PaddingLeft(2)
+	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(0).Foreground(lipgloss.Color("63")).Bold(true)
+)
+
+type commandDelegate struct{}
+
+func (d commandDelegate) Height() int                             { return 1 }
+func (d commandDelegate) Spacing() int                            { return 0 }
+func (d commandDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d commandDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	i, ok := listItem.(commandItem)
+	if !ok {
+		return
+	}
+
+	str := string(i)
+
+	fn := itemStyle.Render
+	if index == m.Index() {
+		fn = func(s ...string) string {
+			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+		}
+	}
+
+	fmt.Fprint(w, fn(str))
+}
+
+type fileDelegate struct{}
+
+func (d fileDelegate) Height() int                             { return 1 }
+func (d fileDelegate) Spacing() int                            { return 0 }
+func (d fileDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d fileDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	i, ok := listItem.(fileItem)
+	if !ok {
+		return
+	}
+
+	str := i.Title()
+
+	fn := itemStyle.Render
+	if index == m.Index() {
+		fn = func(s ...string) string {
+			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+		}
+	}
+
+	fmt.Fprint(w, fn(str))
+}
 
 func Chat() {
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
@@ -482,7 +552,6 @@ func Chat() {
 	ti.SetValue("")
 
 	vp := viewport.New(0, 0)
-	vp.SetContent(constants.STICK_ASCII)
 
 	dirTree, err := core.WorkingDirectoryTree(nil, []string{".git"})
 	if err != nil {
@@ -493,7 +562,7 @@ func Chat() {
 	m := &Model{
 		input:       ti,
 		viewport:    vp,
-		messages:    []string{constants.STICK_ASCII},
+		messages:    []string{},
 		currentDir:  cwd,
 		dirTree:     &dirTree,
 		inputHeight: minInputHeight,

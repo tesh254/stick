@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/charmbracelet/fang"
-    "github.com/mattn/go-isatty"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tesh254/stick/internal/config"
@@ -27,12 +27,12 @@ var stickCmd = &cobra.Command{
 	Aliases: []string{"stk"},
 	// Use the container's NewRun method to inject dependencies.
 	Run: func(cmd *cobra.Command, args []string) {
-        // If we're not in an interactive terminal, show help instead of launching the TUI
-        if !isatty.IsTerminal(os.Stdout.Fd()) || !isatty.IsTerminal(os.Stdin.Fd()) {
-            _ = cmd.Help()
-            return
-        }
-        tui.Chat()
+		// If we're not in an interactive terminal, show help instead of launching the TUI
+		if !isatty.IsTerminal(os.Stdout.Fd()) || !isatty.IsTerminal(os.Stdin.Fd()) {
+			_ = cmd.Help()
+			return
+		}
+		tui.Chat()
 	},
 }
 
@@ -45,7 +45,7 @@ var versionCmd = &cobra.Command{
 This command displays version information extracted automatically from 
 the Go build system, including Git commit, build date, and more.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(constants.STICK_ASCII)
+		fmt.Print(constants.STICK_ASCII)
 		jsonFlag, _ := cmd.Flags().GetBool("json")
 		shortFlag, _ := cmd.Flags().GetBool("short")
 		commitFlag, _ := cmd.Flags().GetBool("commit")
