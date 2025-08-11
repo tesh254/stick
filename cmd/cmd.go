@@ -6,11 +6,13 @@ import (
 	"os"
 
 	"github.com/charmbracelet/fang"
+    "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tesh254/stick/internal/config"
 	"github.com/tesh254/stick/internal/constants"
 	"github.com/tesh254/stick/internal/version"
+	"github.com/tesh254/stick/tui"
 )
 
 // StickConfig holds configuration for the application.
@@ -24,19 +26,13 @@ var stickCmd = &cobra.Command{
 	Short:   "Stick basically upgrades your git",
 	Aliases: []string{"stk"},
 	// Use the container's NewRun method to inject dependencies.
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Handle version flag specially to show detailed info
-		if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
-			fmt.Println(constants.DETAILED_VERSION())
-			return nil
-		}
-
-		if cmd.Flags().NFlag() == 0 && len(args) == 0 {
-			fmt.Print(constants.STICK_ASCII)
-			fmt.Println(constants.CurrentOSWithVersion())
-			fmt.Printf("\n%s\n", constants.GetReleaseInfo())
-		}
-		return nil
+	Run: func(cmd *cobra.Command, args []string) {
+        // If we're not in an interactive terminal, show help instead of launching the TUI
+        if !isatty.IsTerminal(os.Stdout.Fd()) || !isatty.IsTerminal(os.Stdin.Fd()) {
+            _ = cmd.Help()
+            return
+        }
+        tui.Chat()
 	},
 }
 
@@ -49,6 +45,7 @@ var versionCmd = &cobra.Command{
 This command displays version information extracted automatically from 
 the Go build system, including Git commit, build date, and more.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println(constants.STICK_ASCII)
 		jsonFlag, _ := cmd.Flags().GetBool("json")
 		shortFlag, _ := cmd.Flags().GetBool("short")
 		commitFlag, _ := cmd.Flags().GetBool("commit")
