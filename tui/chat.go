@@ -29,6 +29,7 @@ type agentDoneMsg struct{}
 type agentWaitingForInputMsg struct {
 	prompt string
 }
+type agentStartMsg struct{}
 
 type Model struct {
 	viewport            viewport.Model
@@ -44,6 +45,7 @@ type Model struct {
 	fullCommandItems    []list.Item
 	inputHeight         int
 	provider            string
+	agentSession        *agent.AgentSession
 	agentResponses      chan string
 	userInputChan       chan string
 }
@@ -60,6 +62,15 @@ func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *
 
 	vp := viewport.New(0, 0)
 
+	agentResponses := make(chan string)
+	userInputChan := make(chan string)
+
+	agentSession, err := agent.NewAgentSession(provider, agentResponses, userInputChan)
+	if err != nil {
+		// Handle error appropriately, maybe return an error from NewModel
+		panic(err)
+	}
+
 	m := &Model{
 		input:          ti,
 		viewport:       vp,
@@ -68,8 +79,9 @@ func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *
 		dirTree:        dirTree,
 		inputHeight:    minInputHeight,
 		provider:       provider,
-		agentResponses: make(chan string),
-		userInputChan:  make(chan string),
+		agentSession:   agentSession,
+		agentResponses: agentResponses,
+		userInputChan:  userInputChan,
 	}
 
 	m.initCommandList()
@@ -105,13 +117,19 @@ func (m *Model) waitForAgentResponse() tea.Cmd {
 			prompt := strings.TrimPrefix(response, "USER_INPUT_REQUEST:")
 			return agentWaitingForInputMsg{prompt: prompt}
 		}
+		// Custom message to signal run completion
+		if response == "AGENT_DONE" {
+			return agentDoneMsg{}
+		}
 		return agentResponseMsg(response)
 	}
 }
 
 func (m *Model) Init() tea.Cmd {
 	m.addMessage("\n\n\n" + constants.STICK_ASCII)
-	return tea.Batch(textarea.Blink, m.input.Focus())
+	return tea.Batch(textarea.Blink, m.input.Focus(), func() tea.Msg {
+		return agentStartMsg{}
+	})
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -131,6 +149,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commandList.SetHeight(dropdownHeight)
 		m.fileList.SetHeight(dropdownHeight)
 		m.updateViewportContent()
+		return m, nil
+	case agentStartMsg:
+		go m.agentSession.Run()
 		return m, nil
 
 	case agentResponseMsg:
@@ -440,7 +461,7 @@ func (m *Model) execute() (tea.Model, tea.Cmd) {
 
 	m.setStatus("thinking...")
 	m.addMessage("System: Running...")
-	m.runAgent(text)
+	m.sendPromptToAgent(text)
 
 	m.input.SetValue("")
 	m.inputHeight = minInputHeight
@@ -491,11 +512,9 @@ func (m *Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, content, bottom)
 }
 
-// runAgent kicks off the agent execution in a goroutine and streams results back
-func (m *Model) runAgent(prompt string) {
-	go func() {
-		agent.RunAgent(prompt, m.provider, m.agentResponses, m.userInputChan)
-	}()
+// sendPromptToAgent kicks off the agent execution in a goroutine and streams results back
+func (m *Model) sendPromptToAgent(prompt string) {
+	m.agentSession.ProcessPrompt(prompt)
 }
 
 func (m *Model) initCommandList() {

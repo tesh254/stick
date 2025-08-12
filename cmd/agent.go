@@ -41,9 +41,15 @@ var agentCliCmd = &cobra.Command{
 
 		responseChan := make(chan string)
 		userInputChan := make(chan string)
-		defer close(userInputChan)
 
-		go agent.RunAgent(prompt, provider, responseChan, userInputChan)
+		agentSession, err := agent.NewAgentSession(provider, responseChan, userInputChan)
+		if err != nil {
+			fmt.Println("Error creating agent session:", err)
+			return
+		}
+
+		go agentSession.Run()
+		agentSession.ProcessPrompt(prompt)
 
 		for {
 			response, ok := <-responseChan
@@ -63,6 +69,8 @@ var agentCliCmd = &cobra.Command{
 					break
 				}
 				userInputChan <- strings.TrimSpace(input)
+			} else if response == "AGENT_DONE" {
+				break
 			} else {
 				fmt.Printf("Agent: %s\n", response)
 			}
@@ -72,4 +80,5 @@ var agentCliCmd = &cobra.Command{
 
 func init() {
 	agentCmd.AddCommand(agentCliCmd)
+	agentCmd.AddCommand(agentInitCmd)
 }
