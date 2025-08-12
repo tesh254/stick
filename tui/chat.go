@@ -26,12 +26,15 @@ const (
 
 type agentResponseMsg string
 type agentDoneMsg struct{}
+type agentWaitingForInputMsg struct {
+	prompt string
+}
 
 type Model struct {
 	viewport            viewport.Model
 	input               textarea.Model
 	messages            []string
-	loading             bool
+	status              string
 	showCommandDropdown bool
 	showFileDropdown    bool
 	commandList         list.Model
@@ -42,6 +45,7 @@ type Model struct {
 	inputHeight         int
 	provider            string
 	agentResponses      chan string
+	userInputChan       chan string
 }
 
 func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *Model {
@@ -65,6 +69,7 @@ func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *
 		inputHeight:    minInputHeight,
 		provider:       provider,
 		agentResponses: make(chan string),
+		userInputChan:  make(chan string),
 	}
 
 	m.initCommandList()
@@ -86,8 +91,8 @@ func (m *Model) updateViewportContent() {
 	m.viewport.GotoBottom()
 }
 
-func (m *Model) toggleLoading() {
-	m.loading = !m.loading
+func (m *Model) setStatus(status string) {
+	m.status = status
 }
 
 func (m *Model) waitForAgentResponse() tea.Cmd {
@@ -95,6 +100,10 @@ func (m *Model) waitForAgentResponse() tea.Cmd {
 		response, ok := <-m.agentResponses
 		if !ok {
 			return agentDoneMsg{}
+		}
+		if strings.HasPrefix(response, "USER_INPUT_REQUEST:") {
+			prompt := strings.TrimPrefix(response, "USER_INPUT_REQUEST:")
+			return agentWaitingForInputMsg{prompt: prompt}
 		}
 		return agentResponseMsg(response)
 	}
@@ -127,18 +136,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentResponseMsg:
 		m.addMessage("agent: " + string(msg))
 		return m, m.waitForAgentResponse()
+	case agentWaitingForInputMsg:
+		m.setStatus(fmt.Sprintf("waiting for input: %s", msg.prompt))
+		m.input.Placeholder = msg.prompt
+		m.input.Focus()
+		return m, nil
 	case agentDoneMsg:
-		m.loading = false
+		m.setStatus("")
 		m.addMessage("System: Run complete.")
 		m.input.Focus()
 		return m, nil
 
 	case tea.KeyMsg:
-		if m.loading {
+		if m.status != "" {
 			if msg.String() == "ctrl+c" {
 				return m, tea.Quit
 			}
-			return m, nil
+			if m.status != "waiting for input" {
+				return m, nil
+			}
 		}
 
 		switch msg.String() {
@@ -393,6 +409,15 @@ func (m *Model) execute() (tea.Model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
+
+	if m.status != "" {
+		m.userInputChan <- text
+		m.setStatus("thinking...")
+		m.input.SetValue("")
+		m.input.Placeholder = ""
+		return m, m.waitForAgentResponse()
+	}
+
 	m.addMessage(boldText.Render(purpleText.Render("you: ")) + text)
 
 	var cmd tea.Cmd
@@ -413,7 +438,7 @@ func (m *Model) execute() (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	m.loading = true
+	m.setStatus("thinking...")
 	m.addMessage("System: Running...")
 	m.runAgent(text)
 
@@ -427,8 +452,8 @@ func (m *Model) execute() (tea.Model, tea.Cmd) {
 func (m *Model) View() string {
 	content := m.viewport.View()
 	bottom := ""
-	if m.loading {
-		bottom = lipgloss.NewStyle().Bold(true).Render("Loading...")
+	if m.status != "" {
+		bottom = lipgloss.NewStyle().Bold(true).Render(m.status)
 	} else {
 		inputContent := strings.TrimSpace(m.input.View())
 		lines := strings.Split(inputContent, "\n")
@@ -469,7 +494,7 @@ func (m *Model) View() string {
 // runAgent kicks off the agent execution in a goroutine and streams results back
 func (m *Model) runAgent(prompt string) {
 	go func() {
-		agent.RunAgent(prompt, m.provider, m.agentResponses)
+		agent.RunAgent(prompt, m.provider, m.agentResponses, m.userInputChan)
 	}()
 }
 

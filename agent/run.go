@@ -172,10 +172,31 @@ func getTools() []Tool {
 				},
 			},
 		},
+		{
+			Type: "function",
+			Function: &Function{
+				Name:        "request_user_input",
+				Description: "requests user input",
+				Parameters: &Parameters{
+					Type: "object",
+					Properties: map[string]Property{
+						"prompt": {
+							Type:        "string",
+							Description: "the prompt to display to the user",
+						},
+					},
+					Required: []string{"prompt"},
+				},
+			},
+		},
 	}
 }
 
-func RunAgent(prompt string, provider string, responseChan chan string) {
+type UserInputRequest struct {
+	Prompt string
+}
+
+func RunAgent(prompt string, provider string, responseChan chan string, userInputChan chan string) {
 	defer close(responseChan)
 
 	client, err := NewAIClient(provider)
@@ -201,43 +222,104 @@ func RunAgent(prompt string, provider string, responseChan chan string) {
 		},
 	}
 
-	req := ChatCompletionRequest{
-		Model:     providerConfig.Model,
-		Messages:  messages,
-		Tools:     getTools(),
-		MaxTokens: 4096,
-	}
+	for {
+		req := ChatCompletionRequest{
+			Model:     providerConfig.Model,
+			Messages:  messages,
+			Tools:     getTools(),
+			MaxTokens: 4096,
+		}
 
-	resp, err := client.Create(req)
-	if err != nil {
-		responseChan <- fmt.Sprintf("Error creating chat completion: %v", err)
-		return
-	}
+		resp, err := client.Create(req)
+		if err != nil {
+			responseChan <- fmt.Sprintf("Error creating chat completion: %v", err)
+			return
+		}
 
-	// Print the response content
-	respBytes, err := json.MarshalIndent(resp, "", "  ")
-	if err != nil {
-		responseChan <- fmt.Sprintf("Error marshalling response: %v", err)
-		return
-	}
-	responseChan <- string(respBytes)
+		if len(resp.Choices) == 0 {
+			responseChan <- "No response from AI"
+			return
+		}
 
-	// Handle any tool calls in the response
-	if len(resp.Choices) > 0 && len(resp.Choices[0].Message.ToolCalls) > 0 {
-		for _, toolCall := range resp.Choices[0].Message.ToolCalls {
-			// Unmarshal the arguments from the tool call
-			var toolArgs map[string]interface{}
-			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &toolArgs); err != nil {
-				responseChan <- fmt.Sprintf("Failed to unmarshal tool arguments: %v", err)
-				continue
+		respMessage := resp.Choices[0].Message
+		// Convert resp.Choices[0].Message.ToolCalls to []agent.ToolCall
+		var toolCalls []ToolCall
+		for _, tc := range respMessage.ToolCalls {
+			toolCalls = append(toolCalls, ToolCall{
+				ID:   tc.ID,
+				Type: tc.Type,
+				Function: struct {
+					Name      string `json:"name"`
+					Arguments string `json:"arguments"`
+				}{
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Arguments,
+				},
+			})
+		}
+
+		messages = append(messages, Message{
+			Role:      respMessage.Role,
+			Content:   respMessage.Content,
+			ToolCalls: toolCalls,
+		})
+
+		if len(respMessage.ToolCalls) > 0 {
+			for _, toolCall := range respMessage.ToolCalls {
+				var toolArgs map[string]interface{}
+				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &toolArgs); err != nil {
+					responseChan <- fmt.Sprintf("Failed to unmarshal tool arguments: %v", err)
+					continue
+				}
+
+				if toolCall.Function.Name == "request_user_input" {
+					prompt, ok := toolArgs["prompt"].(string)
+					if !ok {
+						responseChan <- "Invalid prompt for user input"
+						continue
+					}
+					// Signal TUI to ask for input
+					responseChan <- fmt.Sprintf("USER_INPUT_REQUEST:%s", prompt)
+					// Wait for user input
+					userInput, ok := <-userInputChan
+					if !ok {
+						// Channel closed, terminate
+						return
+					}
+					// Add user input to messages
+					messages = append(messages, Message{
+						Role:       "tool",
+						ToolCallID: toolCall.ID,
+						Name:       toolCall.Function.Name,
+						Content:    userInput,
+					})
+					continue
+				}
+
+				result, err := ExecuteTool(toolCall.Function.Name, toolArgs)
+				if err != nil {
+					responseChan <- fmt.Sprintf("Error executing tool: %v", err)
+					// Potentially add error message to conversation history
+					messages = append(messages, Message{
+						Role:       "tool",
+						ToolCallID: toolCall.ID,
+						Name:       toolCall.Function.Name,
+						Content:    fmt.Sprintf("Error: %v", err),
+					})
+					continue
+				}
+				responseChan <- fmt.Sprintf("Tool Result: %s", result)
+				messages = append(messages, Message{
+					Role:       "tool",
+					ToolCallID: toolCall.ID,
+					Name:       toolCall.Function.Name,
+					Content:    result,
+				})
 			}
-
-			result, err := ExecuteTool(toolCall.Function.Name, toolArgs)
-			if err != nil {
-				responseChan <- fmt.Sprintf("Error executing tool: %v", err)
-				continue
-			}
-			responseChan <- fmt.Sprintf("Tool Result: %s", result)
+		} else {
+			// If no tool calls, send the message content to the user and exit the loop.
+			responseChan <- respMessage.Content
+			return
 		}
 	}
 }

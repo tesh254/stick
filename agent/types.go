@@ -2,8 +2,21 @@ package agent
 
 // Message represents a single message in a conversation
 type Message struct {
-	Role    string `json:"role"` // e.g. user, assistant
-	Content string `json:"content"`
+	Role       string     `json:"role"` // e.g. user, assistant
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Name       string     `json:"name,omitempty"`
+}
+
+// ToolCall represents a tool call from the AI
+type ToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
 }
 
 // Tool represents a tool (function) that the AI can call
