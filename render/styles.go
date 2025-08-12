@@ -8,6 +8,8 @@ var RedText = lipgloss.NewStyle().Foreground(lipgloss.Color("#E43636"))
 var CreamHighlight = lipgloss.NewStyle().Background(lipgloss.Color("#F6EFD2"))
 var BlueText = lipgloss.NewStyle().Foreground(lipgloss.Color("#0046FF"))
 var OrangeHighlight = lipgloss.NewStyle().Background(lipgloss.Color("#FF8040"))
+var GrayText = lipgloss.NewStyle().Foreground(lipgloss.Color("#B7B7B7"))
+var GreenText = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00"))
 
 // Define styles for the code block
 var (

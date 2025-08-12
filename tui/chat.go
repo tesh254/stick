@@ -125,6 +125,8 @@ func (m *Model) waitForAgentResponse() tea.Cmd {
 
 func (m *Model) Init() tea.Cmd {
 	m.addMessage("\n\n\n" + constants.STICK_ASCII)
+	m.addMessage(render.GreenText.Render("provider: " + m.provider))
+	m.addMessage(render.GrayText.Render("stick version: " + constants.VERSION()))
 	return tea.Batch(textarea.Blink, m.input.Focus(), func() tea.Msg {
 		return agentStartMsg{}
 	})
