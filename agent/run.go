@@ -182,5 +182,37 @@ func getTools() []Tool {
 				},
 			},
 		},
+		{
+			Type: "function",
+			Function: &Function{
+				Name:        "print_code_block",
+				Description: "print code blocks on terminal",
+				Parameters: &Parameters{
+					Properties: map[string]Property{
+						"content": {
+							Type:        "string",
+							Description: "code block content",
+						},
+					},
+					Required: []string{"content"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: &Function{
+				Name:        "render_markdown",
+				Description: "renders markdown content",
+				Parameters: &Parameters{
+					Properties: map[string]Property{
+						"content": {
+							Type:        "string",
+							Description: "markdown content",
+						},
+					},
+					Required: []string{"content"},
+				},
+			},
+		},
 	}
 }

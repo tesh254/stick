@@ -151,7 +151,7 @@ func (s *AgentSession) processPrompt(prompt string) {
 					})
 					continue
 				}
-				s.responseChan <- fmt.Sprintf("Tool Result: %s", result)
+				s.responseChan <- fmt.Sprintf("Calling %s with arguments %sTool Result: %s", toolCall.Function.Name, toolCall.Function.Arguments, result)
 				s.messages = append(s.messages, Message{
 					Role:       "tool",
 					ToolCallID: toolCall.ID,

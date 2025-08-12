@@ -15,6 +15,7 @@ import (
 	"github.com/tesh254/ffs/core"
 	"github.com/tesh254/stick/agent"
 	"github.com/tesh254/stick/internal/constants"
+	"github.com/tesh254/stick/render"
 )
 
 const (
@@ -89,9 +90,6 @@ func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *
 	return m
 }
 
-var purpleText = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
-var boldText = lipgloss.NewStyle().Bold(true)
-
 func (m *Model) addMessage(msg string) {
 	m.messages = append(m.messages, msg)
 	m.updateViewportContent()
@@ -155,7 +153,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case agentResponseMsg:
-		m.addMessage("agent: " + string(msg))
+		m.addMessage(render.CreamHighlight.Render(render.BoldText.Render(render.PurpleText.Render("stick:"))) + " " + string(msg))
 		return m, m.waitForAgentResponse()
 	case agentWaitingForInputMsg:
 		m.setStatus(fmt.Sprintf("waiting for input: %s", msg.prompt))
@@ -164,7 +162,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case agentDoneMsg:
 		m.setStatus("")
-		m.addMessage("System: Run complete.")
+		m.addMessage("what's next")
 		m.input.Focus()
 		return m, nil
 
@@ -439,7 +437,7 @@ func (m *Model) execute() (tea.Model, tea.Cmd) {
 		return m, m.waitForAgentResponse()
 	}
 
-	m.addMessage(boldText.Render(purpleText.Render("you: ")) + text)
+	m.addMessage(render.OrangeHighlight.Render(render.BoldText.Render(render.BlueText.Render("you:"))) + " " + text)
 
 	var cmd tea.Cmd
 	if strings.HasPrefix(text, "/") {

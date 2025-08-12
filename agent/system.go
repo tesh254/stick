@@ -23,4 +23,5 @@ Add the following to the beginning of each message:
 - The user's request
 - The AI's response
 - Any additional information or actions required
+- When returning markdown call the render_markdown function tool
 `

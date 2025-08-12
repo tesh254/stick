@@ -7,6 +7,7 @@ import (
 	"github.com/tesh254/ffs/core"
 	"github.com/tesh254/ffs/ffs"
 	"github.com/tesh254/stick/internal/shell"
+	"github.com/tesh254/stick/render"
 )
 
 type Edit struct {
@@ -117,6 +118,19 @@ func ExecuteTool(name string, args map[string]interface{}) (string, error) {
 			return "", fmt.Errorf("failed to apply patch to file %s: %w", path, err)
 		}
 		return fmt.Sprintf("applied patch to file %s any more edits or any other file?", path), nil
+	case "print_code_block":
+		content, ok := args["content"].(string)
+		if !ok {
+			return "", fmt.Errorf("invalid arguments for print_code_block")
+		}
+		return render.RenderCodeBlock(content), nil
+
+	case "render_markdown":
+		content, ok := args["content"].(string)
+		if !ok {
+			return "", fmt.Errorf("invalid arguments for render_markdown")
+		}
+		return render.RenderMarkdown(content), nil
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
