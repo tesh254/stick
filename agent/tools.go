@@ -16,6 +16,56 @@ type Edit struct {
 	Content string `json:"content"`
 }
 
+type ToolMetadata struct {
+	Label string
+	Info  string
+}
+
+func MetadataLabels(name string) map[string]ToolMetadata {
+	return map[string]ToolMetadata{
+		"run_tool": {
+			Label: "CommandRun",
+			Info:  "Running a command in the terminal",
+		},
+		"create_file": {
+			Label: "CreateFile",
+			Info:  "Creating a file in a given path",
+		},
+		"create_dir": {
+			Label: "CreateDir",
+			Info:  "Creating a directory in a given path",
+		},
+		"delete_dir": {
+			Label: "DeleteDir",
+			Info:  "Deleting a directory in a given path",
+		},
+		"delete_file": {
+			Label: "DeleteFile",
+			Info:  "Deleting a file in a given path",
+		},
+		"read_file": {
+			Label: "ReadFile",
+			Info:  "Reading a file in a given path",
+		},
+		"dir_tree": {
+			Label: "DirTree",
+			Info:  "Listing the directory tree",
+		},
+		"patch_file": {
+			Label: "PatchFile",
+			Info:  "Editing a file in a given path and content",
+		},
+		"print_code_block": {
+			Label: "PrintCodeBlock",
+			Info:  "Printing a code block",
+		},
+		"render_markdown": {
+			Label: "RenderMarkdown",
+			Info:  "Rendering markdown",
+		},
+	}
+}
+
 func ExecuteTool(name string, args map[string]interface{}) (string, error) {
 	switch name {
 	case "run_tool":
