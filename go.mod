@@ -12,7 +12,7 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
-	github.com/tesh254/ffs v1.0.9
+	github.com/tesh254/ffs v1.1.0
 	golang.org/x/term v0.33.0
 )
 

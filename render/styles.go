@@ -19,7 +19,7 @@ var (
 			Background(lipgloss.Color("235")).      // Dark gray background
 			Foreground(lipgloss.Color("252")).      // Light gray text
 			Padding(1, 2).
-			Margin(1, 2)
+			Margin(1, 0)
 
 	headerStyle = lipgloss.NewStyle().
 			Bold(true).

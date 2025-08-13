@@ -476,21 +476,19 @@ func (m *Model) View() string {
 	if m.status != "" {
 		bottom = lipgloss.NewStyle().Bold(true).Render(m.status)
 	} else {
-		inputContent := strings.TrimSpace(m.input.View())
-		lines := strings.Split(inputContent, "\n")
-		if len(lines) > 0 {
-			lines[0] = "▲ " + lines[0]
-			for i := 1; i < len(lines); i++ {
-				lines[i] = strings.TrimPrefix(lines[i], "> ")
-			}
-		}
-		inputContent = strings.Join(lines, "\n")
-		inputStyle := lipgloss.NewStyle().
+		prefix := "▲ "
+		inputView := m.input.View()
+
+		// Join the prefix and the input view horizontally
+		prompt := lipgloss.JoinHorizontal(lipgloss.Top, prefix, inputView)
+
+		// Style for the container with a border
+		containerStyle := lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
 			BorderForeground(lipgloss.Color("63")).
-			Padding(0, 1).
-			Width(m.input.Width() + 2)
-		bottom = inputStyle.Render(inputContent)
+			Padding(0, 1)
+
+		bottom = containerStyle.Render(prompt)
 	}
 
 	dropdown := ""
