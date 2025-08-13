@@ -62,6 +62,10 @@ func MetadataLabels(name string) map[string]ToolMetadata {
 			Label: "RenderMarkdown",
 			Info:  "Rendering markdown",
 		},
+		"task_complete": {
+			Label: "TaskComplete",
+			Info:  "Signals that the task is complete",
+		},
 	}
 }
 
@@ -179,6 +183,12 @@ func ExecuteTool(name string, args map[string]interface{}) (string, error) {
 			return "", fmt.Errorf("invalid arguments for render_markdown")
 		}
 		return content, nil
+	case "task_complete":
+		message, ok := args["message"].(string)
+		if !ok {
+			return "Task completed.", nil
+		}
+		return message, nil
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}

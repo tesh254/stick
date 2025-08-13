@@ -161,6 +161,13 @@ func (s *AgentSession) processPrompt(prompt string) {
 					})
 					continue
 				}
+
+				if toolCall.Function.Name == "task_complete" {
+					s.responseChan <- result
+					s.responseChan <- "AGENT_DONE"
+					return
+				}
+
 				s.responseChan <- message.AgentToolResultMsg{
 					Name:   toolCall.Function.Name,
 					Result: result,
@@ -171,11 +178,6 @@ func (s *AgentSession) processPrompt(prompt string) {
 					Name:       toolCall.Function.Name,
 					Content:    result,
 				})
-
-				if toolCall.Function.Name == "print_code_block" || toolCall.Function.Name == "render_markdown" {
-					s.responseChan <- "AGENT_DONE"
-					return
-				}
 			}
 		} else {
 			// If no tool calls, send the message content to the user and exit the loop.
