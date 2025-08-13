@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/tesh254/stick/agent/message"
 	"github.com/tesh254/stick/internal/config"
 )
 
@@ -12,13 +13,13 @@ type AgentSession struct {
 	provider      string
 	client        AIClient
 	messages      []Message
-	responseChan  chan<- string
+	responseChan  chan<- any
 	userInputChan <-chan string
 	promptChan    chan string
 }
 
 // NewAgentSession creates a new agent session.
-func NewAgentSession(provider string, responseChan chan<- string, userInputChan <-chan string) (*AgentSession, error) {
+func NewAgentSession(provider string, responseChan chan<- any, userInputChan <-chan string) (*AgentSession, error) {
 	client, err := NewAIClient(provider)
 	if err != nil {
 		return nil, fmt.Errorf("error creating AI client: %v", err)
@@ -139,9 +140,18 @@ func (s *AgentSession) processPrompt(prompt string) {
 					continue
 				}
 
+				s.responseChan <- message.AgentToolCallMsg{
+					Name: toolCall.Function.Name,
+					Args: toolCall.Function.Arguments,
+				}
+
 				result, err := ExecuteTool(toolCall.Function.Name, toolArgs)
 				if err != nil {
-					s.responseChan <- fmt.Sprintf("Error executing tool: %v", err)
+					s.responseChan <- message.AgentToolResultMsg{
+						Name:    toolCall.Function.Name,
+						Result:  fmt.Sprintf("Error executing tool: %v", err),
+						IsError: true,
+					}
 					// Potentially add error message to conversation history
 					s.messages = append(s.messages, Message{
 						Role:       "tool",
@@ -151,13 +161,21 @@ func (s *AgentSession) processPrompt(prompt string) {
 					})
 					continue
 				}
-				s.responseChan <- fmt.Sprintf("Calling %s with arguments %sTool Result: %s", toolCall.Function.Name, toolCall.Function.Arguments, result)
+				s.responseChan <- message.AgentToolResultMsg{
+					Name:   toolCall.Function.Name,
+					Result: result,
+				}
 				s.messages = append(s.messages, Message{
 					Role:       "tool",
 					ToolCallID: toolCall.ID,
 					Name:       toolCall.Function.Name,
 					Content:    result,
 				})
+
+				if toolCall.Function.Name == "print_code_block" || toolCall.Function.Name == "render_markdown" {
+					s.responseChan <- "AGENT_DONE"
+					return
+				}
 			}
 		} else {
 			// If no tool calls, send the message content to the user and exit the loop.

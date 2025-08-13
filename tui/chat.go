@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tesh254/ffs/core"
 	"github.com/tesh254/stick/agent"
+	"github.com/tesh254/stick/agent/message"
 	"github.com/tesh254/stick/internal/constants"
 	"github.com/tesh254/stick/render"
 )
@@ -30,6 +31,7 @@ type agentDoneMsg struct{}
 type agentWaitingForInputMsg struct {
 	prompt string
 }
+
 type agentStartMsg struct{}
 
 type Model struct {
@@ -47,7 +49,7 @@ type Model struct {
 	inputHeight         int
 	provider            string
 	agentSession        *agent.AgentSession
-	agentResponses      chan string
+	agentResponses      chan any
 	userInputChan       chan string
 }
 
@@ -63,7 +65,7 @@ func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *
 
 	vp := viewport.New(0, 0)
 
-	agentResponses := make(chan string)
+	agentResponses := make(chan any)
 	userInputChan := make(chan string)
 
 	agentSession, err := agent.NewAgentSession(provider, agentResponses, userInputChan)
@@ -111,15 +113,22 @@ func (m *Model) waitForAgentResponse() tea.Cmd {
 		if !ok {
 			return agentDoneMsg{}
 		}
-		if strings.HasPrefix(response, "USER_INPUT_REQUEST:") {
-			prompt := strings.TrimPrefix(response, "USER_INPUT_REQUEST:")
-			return agentWaitingForInputMsg{prompt: prompt}
+
+		switch msg := response.(type) {
+		case string:
+			if strings.HasPrefix(msg, "USER_INPUT_REQUEST:") {
+				prompt := strings.TrimPrefix(msg, "USER_INPUT_REQUEST:")
+				return agentWaitingForInputMsg{prompt: prompt}
+			}
+			if msg == "AGENT_DONE" {
+				return agentDoneMsg{}
+			}
+			return agentResponseMsg(msg)
+		case message.AgentToolCallMsg, message.AgentToolResultMsg:
+			return msg
+		default:
+			return agentResponseMsg(fmt.Sprintf("unknown response type: %T", msg))
 		}
-		// Custom message to signal run completion
-		if response == "AGENT_DONE" {
-			return agentDoneMsg{}
-		}
-		return agentResponseMsg(response)
 	}
 }
 
@@ -156,6 +165,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case agentResponseMsg:
 		m.addMessage(render.CreamHighlight.Render(render.BoldText.Render(render.PurpleText.Render("stick:"))) + " " + string(msg))
+		return m, m.waitForAgentResponse()
+	case message.AgentToolCallMsg:
+		m.setStatus(fmt.Sprintf("running tool: %s", msg.Name))
+		m.addMessage(render.RenderToolCall(msg.Name, msg.Args))
+		return m, m.waitForAgentResponse()
+	case message.AgentToolResultMsg:
+		m.setStatus("thinking...")
+		if msg.Name == "print_code_block" {
+			m.addMessage(render.RenderCodeBlock(msg.Result))
+		} else if msg.Name == "render_markdown" {
+			m.addMessage(render.RenderMarkdown(msg.Result))
+		} else {
+			m.addMessage(render.RenderToolResult(msg.Name, msg.Result, msg.IsError))
+		}
 		return m, m.waitForAgentResponse()
 	case agentWaitingForInputMsg:
 		m.setStatus(fmt.Sprintf("waiting for input: %s", msg.prompt))
@@ -460,7 +483,6 @@ func (m *Model) execute() (tea.Model, tea.Cmd) {
 	}
 
 	m.setStatus("thinking...")
-	m.addMessage("System: Running...")
 	m.sendPromptToAgent(text)
 
 	m.input.SetValue("")

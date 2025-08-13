@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tesh254/stick/agent"
+	"github.com/tesh254/stick/agent/message"
 	"github.com/tesh254/stick/tui"
 )
 
@@ -39,7 +40,7 @@ var agentCliCmd = &cobra.Command{
 		prompt := args[0]
 		provider, _ := cmd.Flags().GetString("provider")
 
-		responseChan := make(chan string)
+		responseChan := make(chan any)
 		userInputChan := make(chan string)
 
 		agentSession, err := agent.NewAgentSession(provider, responseChan, userInputChan)
@@ -57,22 +58,33 @@ var agentCliCmd = &cobra.Command{
 				break
 			}
 
-			if strings.HasPrefix(response, "USER_INPUT_REQUEST:") {
-				prompt := strings.TrimPrefix(response, "USER_INPUT_REQUEST:")
-				fmt.Printf("Agent: %s\n", prompt)
-				fmt.Print("You: ")
+			switch msg := response.(type) {
+			case string:
+				if strings.HasPrefix(msg, "USER_INPUT_REQUEST:") {
+					prompt := strings.TrimPrefix(msg, "USER_INPUT_REQUEST:")
+					fmt.Printf("Agent: %s\n", prompt)
+					fmt.Print("You: ")
 
-				reader := bufio.NewReader(os.Stdin)
-				input, err := reader.ReadString('\n')
-				if err != nil {
-					fmt.Println("Error reading input:", err)
-					break
+					reader := bufio.NewReader(os.Stdin)
+					input, err := reader.ReadString('\n')
+					if err != nil {
+						fmt.Println("Error reading input:", err)
+						break
+					}
+					userInputChan <- strings.TrimSpace(input)
+				} else if msg == "AGENT_DONE" {
+					return
+				} else {
+					fmt.Printf("Agent: %s\n", msg)
 				}
-				userInputChan <- strings.TrimSpace(input)
-			} else if response == "AGENT_DONE" {
-				break
-			} else {
-				fmt.Printf("Agent: %s\n", response)
+			case message.AgentToolCallMsg:
+				fmt.Printf("Tool Call: %s(%s)\n", msg.Name, msg.Args)
+			case message.AgentToolResultMsg:
+				if msg.IsError {
+					fmt.Printf("Tool Error: %s\n", msg.Result)
+				} else {
+					fmt.Printf("Tool Result: %s\n", msg.Result)
+				}
 			}
 		}
 	},

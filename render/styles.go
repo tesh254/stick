@@ -86,3 +86,37 @@ var (
 		Margin(1, 0).
 		Render("━━━━━")
 )
+
+// Define styles for tool rendering
+var (
+	toolCallHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("208")). // Orange
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("208")).
+				Padding(0, 1).
+				MarginBottom(1)
+
+	toolCallBodyStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("240")). // Gray
+				Padding(0, 1)
+
+	toolResultHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("69")). // Bright blue
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("69")).
+				Padding(0, 1).
+				MarginBottom(1)
+
+	toolResultBodyStyle = lipgloss.NewStyle().
+				Padding(0, 1)
+
+	toolErrorHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("196")). // Red
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("196")).
+				Padding(0, 1).
+				MarginBottom(1)
+)
