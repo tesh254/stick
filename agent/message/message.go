@@ -1,11 +1,13 @@
 package message
 
 type AgentToolCallMsg struct {
-	Name string
-	Args string
+	ToolID string
+	Name   string
+	Args   string
 }
 
 type AgentToolResultMsg struct {
+	ToolID  string
 	Name    string
 	Result  string
 	IsError bool

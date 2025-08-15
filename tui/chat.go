@@ -34,10 +34,15 @@ type agentWaitingForInputMsg struct {
 
 type agentStartMsg struct{}
 
+type renderedMessage struct {
+	toolID  string
+	content string
+}
+
 type Model struct {
 	viewport            viewport.Model
 	input               textarea.Model
-	messages            []string
+	messages            []renderedMessage
 	status              string
 	showCommandDropdown bool
 	showFileDropdown    bool
@@ -51,6 +56,7 @@ type Model struct {
 	agentSession        *agent.AgentSession
 	agentResponses      chan any
 	userInputChan       chan string
+	activeToolCalls     map[string]message.AgentToolCallMsg
 }
 
 func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *Model {
@@ -75,16 +81,17 @@ func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *
 	}
 
 	m := &Model{
-		input:          ti,
-		viewport:       vp,
-		messages:       []string{},
-		currentDir:     currentDir,
-		dirTree:        dirTree,
-		inputHeight:    minInputHeight,
-		provider:       provider,
-		agentSession:   agentSession,
-		agentResponses: agentResponses,
-		userInputChan:  userInputChan,
+		input:           ti,
+		viewport:        vp,
+		messages:        []renderedMessage{},
+		currentDir:      currentDir,
+		dirTree:         dirTree,
+		inputHeight:     minInputHeight,
+		provider:        provider,
+		agentSession:    agentSession,
+		agentResponses:  agentResponses,
+		userInputChan:   userInputChan,
+		activeToolCalls: make(map[string]message.AgentToolCallMsg),
 	}
 
 	m.initCommandList()
@@ -92,14 +99,18 @@ func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *
 	return m
 }
 
-func (m *Model) addMessage(msg string) {
+func (m *Model) addMessage(msg renderedMessage) {
 	m.messages = append(m.messages, msg)
 	m.updateViewportContent()
 }
 
 func (m *Model) updateViewportContent() {
-	content := strings.Join(m.messages, "\n")
-	m.viewport.SetContent(content)
+	var content strings.Builder
+	for _, msg := range m.messages {
+		content.WriteString(msg.content)
+		content.WriteString("\n")
+	}
+	m.viewport.SetContent(content.String())
 	m.viewport.GotoBottom()
 }
 
@@ -133,9 +144,9 @@ func (m *Model) waitForAgentResponse() tea.Cmd {
 }
 
 func (m *Model) Init() tea.Cmd {
-	m.addMessage("\n\n\n" + constants.STICK_ASCII)
-	m.addMessage(render.GreenText.Render("provider: " + m.provider))
-	m.addMessage(render.GrayText.Render("stick version: " + constants.VERSION()))
+	m.addMessage(renderedMessage{content: "\n\n\n" + constants.STICK_ASCII})
+	m.addMessage(renderedMessage{content: render.GreenText.Render("provider: " + m.provider)})
+	m.addMessage(renderedMessage{content: render.GrayText.Render("stick version: " + constants.VERSION())})
 	return tea.Batch(textarea.Blink, m.input.Focus(), func() tea.Msg {
 		return agentStartMsg{}
 	})
@@ -164,20 +175,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case agentResponseMsg:
-		m.addMessage(render.CreamHighlight.Render(render.BoldText.Render(render.PurpleText.Render("stick:"))) + " " + string(msg))
+		m.addMessage(renderedMessage{content: render.CreamHighlight.Render(render.BoldText.Render(render.PurpleText.Render("stick:"))) + " " + string(msg)})
 		return m, m.waitForAgentResponse()
 	case message.AgentToolCallMsg:
 		m.setStatus(fmt.Sprintf("running tool: %s", msg.Name))
-		m.addMessage(render.RenderToolCall(msg.Name, msg.Args))
+		m.activeToolCalls[msg.ToolID] = msg
+		m.addMessage(renderedMessage{
+			toolID:  msg.ToolID,
+			content: render.RenderToolCall(msg.Name, msg.Args),
+		})
 		return m, m.waitForAgentResponse()
 	case message.AgentToolResultMsg:
 		m.setStatus("thinking...")
-		if msg.Name == "print_code_block" {
-			m.addMessage(render.RenderCodeBlock(msg.Result))
-		} else if msg.Name == "render_markdown" {
-			m.addMessage(render.RenderMarkdown(msg.Result))
-		} else {
-			m.addMessage(render.RenderToolResult(msg.Name, msg.Result, msg.IsError))
+		if call, ok := m.activeToolCalls[msg.ToolID]; ok {
+			for i, rm := range m.messages {
+				if rm.toolID == msg.ToolID {
+					m.messages[i].content = render.RenderToolResult(call.Name, call.Args, msg.Result, msg.IsError)
+					m.updateViewportContent()
+					break
+				}
+			}
+			delete(m.activeToolCalls, msg.ToolID)
 		}
 		return m, m.waitForAgentResponse()
 	case agentWaitingForInputMsg:
@@ -187,7 +205,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case agentDoneMsg:
 		m.setStatus("")
-		m.addMessage("what's next")
+		m.addMessage(renderedMessage{content: "what's next"})
 		m.input.Focus()
 		return m, nil
 
@@ -462,7 +480,7 @@ func (m *Model) execute() (tea.Model, tea.Cmd) {
 		return m, m.waitForAgentResponse()
 	}
 
-	m.addMessage(render.OrangeHighlight.Render(render.BoldText.Render(render.BlueText.Render("you:"))) + " " + text)
+	m.addMessage(renderedMessage{content: render.OrangeHighlight.Render(render.BoldText.Render(render.BlueText.Render("you:"))) + " " + text})
 
 	var cmd tea.Cmd
 	if strings.HasPrefix(text, "/") {
@@ -470,11 +488,11 @@ func (m *Model) execute() (tea.Model, tea.Cmd) {
 		cmdName := commandParts[0]
 		switch cmdName {
 		case "/help":
-			m.addMessage("System: Help commands: /help, /exit")
+			m.addMessage(renderedMessage{content: "System: Help commands: /help, /exit"})
 		case "/exit":
 			cmd = tea.Quit
 		default:
-			m.addMessage("System: Unknown command " + cmdName)
+			m.addMessage(renderedMessage{content: "System: Unknown command " + cmdName})
 		}
 		m.input.SetValue("")
 		m.inputHeight = minInputHeight

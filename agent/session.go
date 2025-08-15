@@ -141,13 +141,15 @@ func (s *AgentSession) processPrompt(prompt string) {
 				}
 
 				s.responseChan <- message.AgentToolCallMsg{
-					Name: toolCall.Function.Name,
-					Args: toolCall.Function.Arguments,
+					ToolID: toolCall.ID,
+					Name:   toolCall.Function.Name,
+					Args:   toolCall.Function.Arguments,
 				}
 
 				result, err := ExecuteTool(toolCall.Function.Name, toolArgs)
 				if err != nil {
 					s.responseChan <- message.AgentToolResultMsg{
+						ToolID:  toolCall.ID,
 						Name:    toolCall.Function.Name,
 						Result:  fmt.Sprintf("Error executing tool: %v", err),
 						IsError: true,
@@ -169,6 +171,7 @@ func (s *AgentSession) processPrompt(prompt string) {
 				}
 
 				s.responseChan <- message.AgentToolResultMsg{
+					ToolID: toolCall.ID,
 					Name:   toolCall.Function.Name,
 					Result: result,
 				}

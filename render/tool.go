@@ -14,7 +14,7 @@ func RenderToolCall(name, args string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, header, content)
 }
 
-func RenderToolResult(name, result string, isError bool) string {
+func RenderToolResult(name, args, result string, isError bool) string {
 	var header string
 	if isError {
 		header = toolErrorHeaderStyle.Render("Tool Error")
@@ -22,7 +22,8 @@ func RenderToolResult(name, result string, isError bool) string {
 		header = toolResultHeaderStyle.Render("Tool Result")
 	}
 	nameText := lipgloss.NewStyle().Bold(true).Render(name)
+	argsText := toolCallBodyStyle.Render(args)
 	resultText := toolResultBodyStyle.Render(result)
-	content := fmt.Sprintf("%s\n%s", nameText, resultText)
+	content := fmt.Sprintf("%s %s\n%s", nameText, argsText, resultText)
 	return lipgloss.JoinVertical(lipgloss.Left, header, content)
 }
