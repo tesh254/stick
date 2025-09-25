@@ -31,6 +31,9 @@ type agentDoneMsg struct{}
 type agentWaitingForInputMsg struct {
 	prompt string
 }
+type agentTaskUpdateMsg struct {
+	tasks []agent.Task
+}
 
 type agentStartMsg struct{}
 
@@ -57,6 +60,8 @@ type Model struct {
 	agentResponses      chan any
 	userInputChan       chan string
 	activeToolCalls     map[string]message.AgentToolCallMsg
+	tasks               []agent.Task
+	stopped             bool
 }
 
 func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *Model {
@@ -92,6 +97,8 @@ func NewModel(provider string, currentDir string, dirTree *core.DirectoryTree) *
 		agentResponses:  agentResponses,
 		userInputChan:   userInputChan,
 		activeToolCalls: make(map[string]message.AgentToolCallMsg),
+		tasks:           []agent.Task{},
+		stopped:         false,
 	}
 
 	m.initCommandList()
@@ -135,6 +142,14 @@ func (m *Model) waitForAgentResponse() tea.Cmd {
 				return agentDoneMsg{}
 			}
 			return agentResponseMsg(msg)
+		case map[string]interface{}:
+			if msg["type"] == "task_update" {
+				tasks, ok := msg["tasks"].([]agent.Task)
+				if ok {
+					return agentTaskUpdateMsg{tasks: tasks}
+				}
+			}
+			return agentResponseMsg(fmt.Sprintf("unknown map response: %v", msg))
 		case message.AgentToolCallMsg, message.AgentToolResultMsg:
 			return msg
 		default:
@@ -208,6 +223,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.addMessage(renderedMessage{content: "what's next"})
 		m.input.Focus()
 		return m, nil
+	case agentTaskUpdateMsg:
+		m.tasks = msg.tasks
+		return m, m.waitForAgentResponse()
 
 	case tea.KeyMsg:
 		if m.status != "" {
@@ -222,6 +240,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
+		case "s":
+			if m.status != "" && !m.stopped {
+				m.agentSession.Stop()
+				m.stopped = true
+				m.setStatus("agent stopped")
+				m.addMessage(renderedMessage{content: "Task execution stopped. You can resume or provide a new prompt."})
+				return m, nil
+			}
 		}
 
 		var inputCmd, listCmd, vpCmd tea.Cmd
@@ -510,7 +536,25 @@ func (m *Model) execute() (tea.Model, tea.Cmd) {
 	return m, m.waitForAgentResponse()
 }
 
+func (m *Model) renderTasks() string {
+	if len(m.tasks) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+	builder.WriteString(lipgloss.NewStyle().Bold(true).Render("Tasks:\n"))
+	for _, t := range m.tasks {
+		icon := "☐"
+		if t.Done {
+			icon = "✅"
+		}
+		builder.WriteString(fmt.Sprintf("%s %s\n", icon, t.Description))
+	}
+	return builder.String()
+}
+
 func (m *Model) View() string {
+	tasks := m.renderTasks()
 	content := m.viewport.View()
 	bottom := ""
 	if m.status != "" {
@@ -547,11 +591,22 @@ func (m *Model) View() string {
 		bottom = lipgloss.JoinVertical(lipgloss.Left, dropdown, bottom)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, content, bottom)
+	return lipgloss.JoinVertical(lipgloss.Left, tasks, content, bottom)
 }
 
 // sendPromptToAgent kicks off the agent execution in a goroutine and streams results back
 func (m *Model) sendPromptToAgent(prompt string) {
+	if m.stopped {
+		// Re-create the agent session if it was stopped
+		agentSession, err := agent.NewAgentSession(m.provider, m.agentResponses, m.userInputChan)
+		if err != nil {
+			// Handle error appropriately
+			panic(err)
+		}
+		m.agentSession = agentSession
+		go m.agentSession.Run()
+		m.stopped = false
+	}
 	m.agentSession.ProcessPrompt(prompt)
 }
 

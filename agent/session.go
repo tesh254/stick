@@ -16,6 +16,8 @@ type AgentSession struct {
 	responseChan  chan<- any
 	userInputChan <-chan string
 	promptChan    chan string
+	Tasks         []Task
+	stopChan      chan struct{}
 }
 
 // NewAgentSession creates a new agent session.
@@ -32,6 +34,8 @@ func NewAgentSession(provider string, responseChan chan<- any, userInputChan <-c
 		responseChan:  responseChan,
 		userInputChan: userInputChan,
 		promptChan:    make(chan string),
+		Tasks:         []Task{},
+		stopChan:      make(chan struct{}),
 	}
 
 	session.messages = append(session.messages, Message{
@@ -44,9 +48,19 @@ func NewAgentSession(provider string, responseChan chan<- any, userInputChan <-c
 
 // Run starts the agent session's main loop.
 func (s *AgentSession) Run() {
-	for prompt := range s.promptChan {
-		s.processPrompt(prompt)
+	for {
+		select {
+		case prompt := <-s.promptChan:
+			s.processPrompt(prompt)
+		case <-s.stopChan:
+			return
+		}
 	}
+}
+
+// Stop stops the agent session.
+func (s *AgentSession) Stop() {
+	close(s.stopChan)
 }
 
 // ProcessPrompt sends a prompt to the AI and handles the response.
@@ -146,7 +160,7 @@ func (s *AgentSession) processPrompt(prompt string) {
 					Args:   toolCall.Function.Arguments,
 				}
 
-				result, err := ExecuteTool(toolCall.Function.Name, toolArgs)
+				result, err := s.ExecuteTool(toolCall.Function.Name, toolArgs)
 				if err != nil {
 					s.responseChan <- message.AgentToolResultMsg{
 						ToolID:  toolCall.ID,
@@ -162,6 +176,13 @@ func (s *AgentSession) processPrompt(prompt string) {
 						Content:    fmt.Sprintf("Error: %v", err),
 					})
 					continue
+				}
+
+				if result == "TASK_SLICE_CREATED" || result == "TASK_STATUS_UPDATED" {
+					s.responseChan <- map[string]interface{}{
+						"type":  "task_update",
+						"tasks": s.Tasks,
+					}
 				}
 
 				if toolCall.Function.Name == "task_complete" {

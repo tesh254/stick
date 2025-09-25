@@ -214,5 +214,55 @@ func getTools() []Tool {
 				},
 			},
 		},
+		{
+			Type: "function",
+			Function: &Function{
+				Name:        "create_task_slice",
+				Description: "creates a new task slice",
+				Parameters: &Parameters{
+					Type: "object",
+					Properties: map[string]Property{
+						"tasks": {
+							Type:        "array",
+							Description: "list of task descriptions",
+							Items:       Item{Type: "string"},
+						},
+					},
+					Required: []string{"tasks"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: &Function{
+				Name:        "update_task_status",
+				Description: "updates the status of a task",
+				Parameters: &Parameters{
+					Type: "object",
+					Properties: map[string]Property{
+						"task_index": {
+							Type:        "integer",
+							Description: "the index of the task to update",
+						},
+						"done": {
+							Type:        "boolean",
+							Description: "the new status of the task",
+						},
+					},
+					Required: []string{"task_index", "done"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: &Function{
+				Name:        "get_tasks",
+				Description: "returns the current task slice",
+				Parameters: &Parameters{
+					Type:       "object",
+					Properties: map[string]Property{},
+				},
+			},
+		},
 	}
 }

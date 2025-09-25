@@ -69,8 +69,37 @@ func MetadataLabels(name string) map[string]ToolMetadata {
 	}
 }
 
-func ExecuteTool(name string, args map[string]interface{}) (string, error) {
+func (s *AgentSession) ExecuteTool(name string, args map[string]interface{}) (string, error) {
 	switch name {
+	case "create_task_slice":
+		tasks, ok := args["tasks"].([]interface{})
+		if !ok {
+			return "", fmt.Errorf("invalid arguments for create_task_slice")
+		}
+		s.Tasks = []Task{}
+		for _, taskDesc := range tasks {
+			s.Tasks = append(s.Tasks, Task{
+				Description: taskDesc.(string),
+				Done:        false,
+			})
+		}
+		return "TASK_SLICE_CREATED", nil
+	case "update_task_status":
+		taskIndex, ok := args["task_index"].(float64)
+		if !ok {
+			return "", fmt.Errorf("invalid arguments for update_task_status: missing task_index")
+		}
+		done, ok := args["done"].(bool)
+		if !ok {
+			return "", fmt.Errorf("invalid arguments for update_task_status: missing done")
+		}
+		if int(taskIndex) >= len(s.Tasks) {
+			return "", fmt.Errorf("invalid task index")
+		}
+		s.Tasks[int(taskIndex)].Done = done
+		return "TASK_STATUS_UPDATED", nil
+	case "get_tasks":
+		return fmt.Sprintf("%v", s.Tasks), nil
 	case "run_tool":
 		command, ok := args["command"].(string)
 		if !ok {
