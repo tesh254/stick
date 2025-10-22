@@ -22,7 +22,23 @@ func (m *model) handleWindowSizeMsg(v tea.WindowSizeMsg) {
 	// Fullscreen: use the whole terminal. Viewport height is terminal minus input + gap.
 	m.viewport.Width = v.Width
 	m.textarea.SetWidth(v.Width)
-	m.viewport.Height = v.Height - m.textarea.Height() - lipgloss.Height(gap)
+	
+	// Calculate the height needed for non-viewport components
+	textAreaHeight := m.textarea.Height()
+	gapHeight := lipgloss.Height(gap)
+	
+	// If modal is shown, we need to reserve space for it as well
+	var modalReservedHeight int
+	if m.showSearchModal {
+		// Reserve approximate height for modal (this is a fixed size modal)
+		// Based on renderSearchModal settings: MaxHeight(15)
+		modalReservedHeight = 15
+	} else {
+		modalReservedHeight = 0
+	}
+	
+	totalNonViewportHeight := textAreaHeight + gapHeight + modalReservedHeight
+	m.viewport.Height = v.Height - totalNonViewportHeight
 
 	// Update wrap style to current viewport width
 	m.wrapStyle = lipgloss.NewStyle().Width(m.viewport.Width)
@@ -322,6 +338,9 @@ func (m *model) startSlashMode() {
 	m.selectedIndex = 0
 	m.populateSlashCommands()
 	m.updateFilteredCommands()
+	
+	// Adjust viewport height to account for modal appearance
+	m.adjustViewportForModal()
 }
 
 // endSlashMode ends the slash command mode and closes the modal
@@ -331,6 +350,34 @@ func (m *model) endSlashMode() {
 	m.searchInput = ""
 	m.filteredCommands = []string{}
 	m.selectedIndex = 0
+	
+	// Adjust viewport height to account for modal disappearance
+	m.adjustViewportForModal()
+}
+
+// adjustViewportForModal adjusts the viewport height based on modal visibility
+func (m *model) adjustViewportForModal() {
+	textAreaHeight := m.textarea.Height()
+	gapHeight := lipgloss.Height(gap)
+	
+	// Calculate the height needed for non-viewport components based on modal state
+	var modalReservedHeight int
+	if m.showSearchModal {
+		// Reserve approximate height for modal
+		modalReservedHeight = 15
+	} else {
+		modalReservedHeight = 0
+	}
+	
+	totalNonViewportHeight := textAreaHeight + gapHeight + modalReservedHeight
+	// Calculate terminal height from current state
+	terminalHeight := m.viewport.Height + textAreaHeight + gapHeight
+	// If modal was already being accounted for, we need to adjust accordingly
+	if m.showSearchModal {
+		terminalHeight += modalReservedHeight // Add back the modal height we were already accounting for
+	}
+	
+	m.viewport.Height = terminalHeight - totalNonViewportHeight
 }
 
 // populateSlashCommands populates the list of available slash commands

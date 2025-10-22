@@ -25,16 +25,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Check if we should start slash mode
 	if !m.isInSlashMode {
-		// Start slash mode if user types a slash at the beginning of text area content
+		// Start slash mode only if user types a slash at the beginning of text area content
 		if len(newValue) > 0 && newValue[0] == '/' {
 			m.startSlashMode()
-		} else {
-			// Check if the slash is at the beginning of the current word (after a space)
-			// This handles cases like "hello /" where the slash triggers the modal
-			if len(newValue) >= 2 && newValue[len(newValue)-2] == ' ' && newValue[len(newValue)-1] == '/' {
-				m.startSlashMode()
-			}
 		}
+		// Don't start slash mode if slash appears anywhere else (e.g. after a space)
 	} else if m.isInSlashMode {
 		// Update search input and filter commands as user types in slash mode
 		if len(newValue) > 0 && strings.HasPrefix(newValue, "/") {
