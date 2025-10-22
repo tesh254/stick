@@ -231,69 +231,69 @@ func TestUnquoteIfQuoted(t *testing.T) {
 
 func TestParser_Parse(t *testing.T) {
 	p := Parser{}
-	
+
 	tests := []struct {
-		name     string
-		input    string
+		name         string
+		input        string
 		expectedName string
 		expectedArgs []string
-		hasError bool
+		hasError     bool
 	}{
 		{
-			name:     "valid function call",
-			input:    "add(2, 2)",
+			name:         "valid function call",
+			input:        "add(2, 2)",
 			expectedName: "add",
 			expectedArgs: []string{"2", "2"},
-			hasError: false,
+			hasError:     false,
 		},
 		{
-			name:     "function with extra text",
-			input:    "add(2, 2) please",
+			name:         "function with extra text",
+			input:        "add(2, 2) please",
 			expectedName: "add",
 			expectedArgs: []string{"2", "2"},
-			hasError: false, // This should now succeed as we allow trailing text
+			hasError:     false, // This should now succeed as we allow trailing text
 		},
 		{
-			name:     "function with wrong bracket",
-			input:    "add{2, 2) please",
+			name:         "function with wrong bracket",
+			input:        "add{2, 2) please",
 			expectedName: "",
 			expectedArgs: nil,
-			hasError: true, // This should fail due to invalid syntax
+			hasError:     true, // This should fail due to invalid syntax
 		},
 		{
-			name:     "no arguments",
-			input:    "add()",
+			name:         "no arguments",
+			input:        "add()",
 			expectedName: "add",
 			expectedArgs: []string{},
-			hasError: false,
+			hasError:     false,
 		},
 		{
-			name:     "empty input",
-			input:    "",
+			name:         "empty input",
+			input:        "",
 			expectedName: "",
 			expectedArgs: nil,
-			hasError: true,
+			hasError:     true,
 		},
 		{
-			name:     "function without parentheses",
-			input:    "add",
+			name:         "function without parentheses",
+			input:        "add",
 			expectedName: "add",
 			expectedArgs: []string{},
-			hasError: false,
+			hasError:     false,
 		},
 		{
-			name:     "malformed parentheses",
-			input:    "add(2, 2",
+			name:         "malformed parentheses",
+			input:        "add(2, 2",
 			expectedName: "",
 			expectedArgs: nil,
-			hasError: true,
+			hasError:     true,
 		},
 		{
-			name:     "unterminated string in args",
-			input:    `add("hello)`,
+			name:         "unterminated string in args",
+			input:        `add("hello)`,
 			expectedName: "",
 			expectedArgs: nil,
-			hasError: true,
+			hasError:     true,
 		},
 	}
 
@@ -378,26 +378,26 @@ func TestCompleteFunctionFlow(t *testing.T) {
 			// Parse the input string to extract function name and arguments
 			p := Parser{}
 			name, args, err := p.Parse(tt.input)
-			
+
 			if tt.hasError {
 				if err == nil {
 					t.Errorf("expected error during parsing but got none")
 				}
 				return // Exit early if we expected an error during parsing
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error during parsing: %v", err)
 				return
 			}
-			
+
 			// Create a registry and register the function
 			r := NewRegistry()
 			r.Register("add", Add, 0, 2)
-			
+
 			// Call the function using the registry
 			result, err := r.Call(name, args)
-			
+
 			if tt.hasError {
 				if err == nil {
 					t.Errorf("expected error during function call but got none, result was: %s", result)
@@ -469,10 +469,10 @@ func TestRegistry_Call(t *testing.T) {
 func TestUnknownFunction(t *testing.T) {
 	r := NewRegistry()
 	// Only register add, not other functions
-	
+
 	// Test calling an unregistered function
 	result, err := r.Call("unknownFunction", []string{})
-	
+
 	if err == nil {
 		t.Errorf("expected error for unknown function, but got none")
 	} else {
@@ -481,7 +481,7 @@ func TestUnknownFunction(t *testing.T) {
 			t.Errorf("expected error %q, got %q", expectedError, err.Error())
 		}
 	}
-	
+
 	if result != "" {
 		t.Errorf("expected empty result for unknown function, got %q", result)
 	}

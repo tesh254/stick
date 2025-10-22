@@ -27,9 +27,9 @@ import (
 
 // BuildInfo variables that will be set during build time
 var (
-	BuildVersion = "dev"      // will be set to git tag during release builds
-	BuildCommit  = "unknown"  // will be set to git commit hash during build
-	BuildDate    = "unknown"  // will be set to build timestamp during build
+	BuildVersion = "dev"     // will be set to git tag during release builds
+	BuildCommit  = "unknown" // will be set to git commit hash during build
+	BuildDate    = "unknown" // will be set to build timestamp during build
 )
 
 // GetBuildInfo retrieves build information from buildinfo or fallback variables
@@ -44,7 +44,7 @@ func GetBuildInfo() (version, commit, date string) {
 				date = setting.Value
 			}
 		}
-		
+
 		// Check if this is a tagged version
 		if info.Main.Version != "" && info.Main.Version != "(devel)" {
 			version = info.Main.Version
@@ -64,6 +64,6 @@ func GetBuildInfo() (version, commit, date string) {
 		commit = BuildCommit
 		date = BuildDate
 	}
-	
+
 	return version, commit, date
 }

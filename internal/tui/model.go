@@ -20,6 +20,14 @@ type model struct {
 	wrapStyle        lipgloss.Style
 	err              error
 	functionRegistry *functions.Registry
+	// Search modal fields
+	showSearchModal  bool
+	searchInput      string
+	allSlashCommands []string // Full list of commands for filtering
+	filteredCommands []string // Filtered list displayed in modal
+	selectedIndex    int
+	// Auto-slash modal behavior
+	isInSlashMode bool // Tracks if we're in slash command mode
 }
 
 // NewProgram creates a Bubble Tea program configured for fullscreen (AltScreen).

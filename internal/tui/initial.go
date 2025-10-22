@@ -1,9 +1,9 @@
 package tui
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tesh254/stick/internal/functions"
 )
@@ -25,6 +25,12 @@ func initialModel() model {
 		wrapStyle:        wrap,
 		err:              nil,
 		functionRegistry: registry,
+		showSearchModal:  false,
+		searchInput:      "",
+		allSlashCommands: []string{},
+		filteredCommands: []string{},
+		selectedIndex:    0,
+		isInSlashMode:    false,
 	}
 }
 

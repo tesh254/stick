@@ -52,10 +52,10 @@ var versionCmd = &cobra.Command{
 	Long:  `Print the version, commit hash, build date and other build information.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		version, commit, date := version.GetBuildInfo()
-		
+
 		// Determine if the build is modified
 		isModified := commit == "unknown" || (version == "dev" && commit != "unknown")
-		
+
 		info := VersionInfo{
 			Version:    version,
 			Commit:     commit,
@@ -64,7 +64,7 @@ var versionCmd = &cobra.Command{
 			Arch:       runtime.GOARCH,
 			IsModified: isModified,
 		}
-		
+
 		if versionJSON {
 			// Output JSON format
 			jsonData, err := json.MarshalIndent(info, "", "  ")
@@ -99,7 +99,7 @@ var buildinfoCmd = &cobra.Command{
 	Long:  `Print detailed build information including version, commit, build date, and platform details.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		version, commit, date := version.GetBuildInfo()
-		
+
 		fmt.Printf("Version: %s\n", version)
 		fmt.Printf("Commit: %s\n", commit)
 		fmt.Printf("Build Date: %s\n", date)
@@ -111,7 +111,7 @@ var buildinfoCmd = &cobra.Command{
 func init() {
 	versionCmd.Flags().BoolVar(&versionShort, "short", false, "Print only the version number")
 	versionCmd.Flags().BoolVar(&versionJSON, "json", false, "Print version information in JSON format")
-	
+
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(buildinfoCmd)
 }
