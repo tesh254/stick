@@ -27,6 +27,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tesh254/stick/internal/handlers"
 )
 
 var cfgFile string
@@ -38,7 +39,7 @@ var rootCmd = &cobra.Command{
 	Aliases: []string{"stk"},
 	// Use the container's NewRun method to inject dependencies.
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("stick command")
+		handlers.StartSession()
 	},
 }
 
