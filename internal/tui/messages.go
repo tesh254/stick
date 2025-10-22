@@ -39,9 +39,50 @@ func (m *model) handleKeyMsg(v tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return *m, tea.Quit
 	case tea.KeyEnter:
 		m.handleEnterKey()
+	case tea.KeyUp:
+		m.handleUpArrow()
+	case tea.KeyDown:
+		m.handleDownArrow()
 	}
 
 	return *m, nil
+}
+
+// handleUpArrow handles the up arrow key to navigate command history
+func (m *model) handleUpArrow() {
+	if len(m.commandHistory) == 0 {
+		return // No history to navigate
+	}
+
+	// If we're at the beginning of the history, start from the most recent command
+	if m.historyIndex == -1 {
+		m.historyIndex = len(m.commandHistory) - 1
+	} else if m.historyIndex > 0 {
+		m.historyIndex--
+	}
+
+	// Set the textarea value to the current history item
+	m.textarea.SetValue(m.commandHistory[m.historyIndex])
+	m.textarea.SetCursor(len(m.commandHistory[m.historyIndex]))
+}
+
+// handleDownArrow handles the down arrow key to navigate forward in command history
+func (m *model) handleDownArrow() {
+	if m.historyIndex == -1 || len(m.commandHistory) == 0 {
+		return // No history to navigate or we're at the current position
+	}
+
+	m.historyIndex++
+
+	// If we've gone past the end of history, reset to empty input
+	if m.historyIndex >= len(m.commandHistory) {
+		m.historyIndex = -1
+		m.textarea.SetValue("")
+	} else {
+		// Set the textarea value to the current history item
+		m.textarea.SetValue(m.commandHistory[m.historyIndex])
+		m.textarea.SetCursor(len(m.commandHistory[m.historyIndex]))
+	}
 }
 
 // handleEnterKey processes the Enter key press in the textarea
@@ -66,6 +107,10 @@ func (m *model) handleEnterKey() {
 			// Regular message, not a function call
 			m.messages = append(m.messages, prefix+input)
 		}
+
+		// Add the input to command history
+		m.commandHistory = append(m.commandHistory, input)
+		m.historyIndex = -1 // Reset history index to current (empty) state
 
 		m.viewport.SetContent(m.wrapStyle.Render(formatMessages(m.messages)))
 		m.textarea.Reset()

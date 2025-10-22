@@ -18,6 +18,8 @@ func initialModel() model {
 	return model{
 		textarea:         ta,
 		messages:         []string{},
+		commandHistory:   []string{},
+		historyIndex:     -1,
 		viewport:         vp,
 		senderStyle:      lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
 		wrapStyle:        wrap,

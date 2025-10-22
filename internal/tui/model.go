@@ -13,6 +13,8 @@ import (
 type model struct {
 	viewport         viewport.Model
 	messages         []string
+	commandHistory   []string
+	historyIndex     int
 	textarea         textarea.Model
 	senderStyle      lipgloss.Style
 	wrapStyle        lipgloss.Style
