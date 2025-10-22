@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/tesh254/stick/internal/functions"
 	"github.com/tesh254/stick/internal/utils"
 )
 
@@ -19,12 +20,13 @@ type (
 )
 
 type model struct {
-	viewport    viewport.Model
-	messages    []string
-	textarea    textarea.Model
-	senderStyle lipgloss.Style
-	wrapStyle   lipgloss.Style
-	err         error
+	viewport         viewport.Model
+	messages         []string
+	textarea         textarea.Model
+	senderStyle      lipgloss.Style
+	wrapStyle        lipgloss.Style
+	err              error
+	functionRegistry *functions.Registry
 }
 
 // NewProgram creates a Bubble Tea program configured for fullscreen (AltScreen).
@@ -59,13 +61,20 @@ Type a message and press Enter to send.`)
 
 	wrap := lipgloss.NewStyle().Width(vp.Width)
 
+	// Initialize function registry and register the functions
+	functionRegistry := functions.NewRegistry()
+	functionRegistry.Register("add", functions.Add, 0, 2)
+	functionRegistry.Register("echo", functions.Echo, 0, -1) // -1 means unlimited arguments
+	functionRegistry.Register("print_statement", functions.Echo, 0, -1)
+
 	return model{
-		textarea:    ta,
-		messages:    []string{},
-		viewport:    vp,
-		senderStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
-		wrapStyle:   wrap,
-		err:         nil,
+		textarea:         ta,
+		messages:         []string{},
+		viewport:         vp,
+		senderStyle:      lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+		wrapStyle:        wrap,
+		err:              nil,
+		functionRegistry: functionRegistry,
 	}
 }
 
@@ -105,12 +114,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			fmt.Println(m.textarea.Value())
 			return m, tea.Quit
 		case tea.KeyEnter:
-			// Build label first; Render takes a single string
-			prefix := m.senderStyle.Render("{" + username + "}: ")
-			m.messages = append(m.messages, prefix+m.textarea.Value())
-			m.viewport.SetContent(m.wrapStyle.Render(strings.Join(m.messages, "\n")))
-			m.textarea.Reset()
-			m.viewport.GotoBottom()
+			input := m.textarea.Value()
+			if input != "" {
+				// Check if input looks like a function call by trying to parse it
+				p := functions.Parser{}
+				name, args, err := p.Parse(input)
+
+				// If parsing succeeds and no error, it's a function call
+				if err == nil && name != "" {
+					// Attempt to call the function
+					result, callErr := m.functionRegistry.Call(name, args)
+					if callErr != nil {
+						// Show error message
+						prefix := m.senderStyle.Render("{" + username + "}: ")
+						m.messages = append(m.messages, prefix+input)
+						m.messages = append(m.messages, "Error: "+callErr.Error())
+					} else {
+						// Show input and result
+						prefix := m.senderStyle.Render("{" + username + "}: ")
+						m.messages = append(m.messages, prefix+input)
+						m.messages = append(m.messages, "Function call result: "+result)
+					}
+				} else {
+					// Regular message, not a function call or invalid function
+					prefix := m.senderStyle.Render("{" + username + "}: ")
+					m.messages = append(m.messages, prefix+input)
+				}
+				m.viewport.SetContent(m.wrapStyle.Render(strings.Join(m.messages, "\n")))
+				m.textarea.Reset()
+				m.viewport.GotoBottom()
+			}
 		}
 
 	// We handle errors just like any other message
@@ -121,6 +154,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	return m, tea.Batch(tiCmd, vpCmd)
 }
+
+
 
 func (m model) View() string {
 	return fmt.Sprintf(
