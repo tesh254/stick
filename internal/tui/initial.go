@@ -31,6 +31,7 @@ func initialModel() model {
 		filteredCommands: []string{},
 		selectedIndex:    0,
 		isInSlashMode:    false,
+		viewportFocused:  false,
 	}
 }
 
@@ -77,6 +78,10 @@ func setupFunctionRegistry() *functions.Registry {
 	registry.Register("add", functions.Add, 0, 2)
 	registry.Register("echo", functions.Echo, 0, -1) // -1 means unlimited arguments
 	registry.Register("print_statement", functions.Echo, 0, -1)
+
+	// crawl functions
+	registry.Register("get_llm_text", functions.GetLLMText, 1, 1)
+	registry.Register("get_page_content", functions.GetPageHTMLContentToMarkdown, 1, 1)
 
 	return registry
 }

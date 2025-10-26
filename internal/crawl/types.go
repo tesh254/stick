@@ -22,4 +22,15 @@ type LlmTxtContent struct {
 	client          *http.Client
 	lastRequestTime map[string]time.Time
 	mutex           sync.Mutex
+	requestSem      chan struct{}
+}
+
+type PageHTMLToMarkdown struct {
+	URL             string
+	Content         *string
+	Config          *CrawlConfig
+	client          *http.Client
+	lastRequestTime map[string]time.Time
+	mutex           sync.Mutex
+	requestSem      chan struct{}
 }

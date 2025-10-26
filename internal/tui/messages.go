@@ -46,7 +46,10 @@ func (m *model) handleWindowSizeMsg(v tea.WindowSizeMsg) {
 	if len(m.messages) > 0 {
 		m.viewport.SetContent(m.wrapStyle.Render(formatMessages(m.messages)))
 	}
-	m.viewport.GotoBottom()
+	// Only go to bottom if viewport is not focused, to preserve scroll position when user is reading history
+	if !m.viewportFocused {
+		m.viewport.GotoBottom()
+	}
 }
 
 // handleKeyMsg processes keyboard inputs
@@ -56,12 +59,45 @@ func (m *model) handleKeyMsg(v tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleSearchModalKeys(v)
 	}
 
+	// Handle viewport-specific keys when viewport is focused
+	if m.viewportFocused {
+		switch v.Type {
+		case tea.KeyUp:
+			m.viewport.LineUp(1)
+			return *m, nil
+		case tea.KeyDown:
+			m.viewport.LineDown(1)
+			return *m, nil
+		case tea.KeyPgUp:
+			m.viewport.PageUp()
+			return *m, nil
+		case tea.KeyPgDown:
+			m.viewport.PageDown()
+			return *m, nil
+		case tea.KeyHome:
+			m.viewport.GotoTop()
+			return *m, nil
+		case tea.KeyEnd:
+			m.viewport.GotoBottom()
+			return *m, nil
+		case tea.KeyEsc:
+			// Unfocus viewport and return to normal mode
+			m.viewportFocused = false
+			return *m, nil
+		}
+	}
+
 	switch v.Type {
 	case tea.KeyCtrlC:
 		// Print last textarea value then quit
 		fmt.Println(m.textarea.Value())
 		return *m, tea.Quit
 	case tea.KeyEsc:
+		// If viewport is focused, unfocus it; otherwise handle normally
+		if m.viewportFocused {
+			m.viewportFocused = false
+			return *m, nil
+		}
 		// Exit search modal if in slash mode, otherwise quit
 		if m.isInSlashMode {
 			m.endSlashMode()
@@ -80,11 +116,42 @@ func (m *model) handleKeyMsg(v tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Handle enter normally (submit message)
 		m.handleEnterKey()
 	case tea.KeyUp:
-		m.handleUpArrow()
+		// Only navigate command history if viewport is not focused
+		if !m.viewportFocused {
+			m.handleUpArrow()
+		} else {
+			// If viewport is focused, scroll up
+			m.viewport.LineUp(1)
+		}
 	case tea.KeyDown:
-		m.handleDownArrow()
+		// Only navigate command history if viewport is focused
+		if !m.viewportFocused {
+			m.handleDownArrow()
+		} else {
+			// If viewport is focused, scroll down
+			m.viewport.LineDown(1)
+		}
+	case tea.KeyPgUp:
+		// If viewport is focused, page up; otherwise, treat as up arrow for history
+		if m.viewportFocused {
+			m.viewport.PageUp()
+		} else {
+			m.handleUpArrow()
+		}
+		return *m, nil
+	case tea.KeyPgDown:
+		// If viewport is focused, page down; otherwise, treat as down arrow for history
+		if m.viewportFocused {
+			m.viewport.PageDown()
+		} else {
+			m.handleDownArrow()
+		}
+		return *m, nil
 	case tea.KeyCtrlR: // Trigger search modal (fallback if needed)
 		m.toggleSearchModal()
+	case tea.KeyCtrlF: // Focus the viewport for scrolling
+		m.viewportFocused = true
+		return *m, nil
 	}
 
 	return *m, nil
@@ -436,5 +503,10 @@ func (m *model) updateFilteredCommands() {
 
 // formatMessages joins messages with newlines for display in the viewport
 func formatMessages(messages []string) string {
+	return strings.Join(messages, "\n")
+}
+
+// formatMessagesHelper joins messages with newlines for display in the viewport
+func formatMessagesHelper(messages []string) string {
 	return strings.Join(messages, "\n")
 }

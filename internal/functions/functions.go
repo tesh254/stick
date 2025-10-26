@@ -1,9 +1,12 @@
 package functions
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/tesh254/stick/internal/crawl"
 )
 
 // Add: args ["1","2"] -> sum numerically; missing args default to 0
@@ -62,4 +65,30 @@ func Echo(args []string) (string, error) {
 		unquotedArgs[i] = unquoteIfQuoted(arg)
 	}
 	return strings.Join(unquotedArgs, " "), nil
+}
+
+// GetLLMText: fetch llm text content to and then we can look into it
+func GetLLMText(args []string) (string, error) {
+	if len(args) == 0 {
+		return "", errors.New("no arguments provided")
+	}
+
+	// Remove quotes from each argument
+	config := crawl.DefaultConfig()
+	textCrawler := crawl.NewLlmText(args[0], config)
+
+	return textCrawler.GetContent(args[0])
+}
+
+// GetPageHTMLContentToMarkdown: fetch page html content and then convert it to markdown
+func GetPageHTMLContentToMarkdown(args []string) (string, error) {
+	if len(args) == 0 {
+		return "", errors.New("no arguments provided")
+	}
+
+	// Remove quotes from each argument
+	config := crawl.DefaultConfig()
+	htmlCrawler := crawl.NewPageHTMLToMarkdown(args[0], config)
+
+	return htmlCrawler.GetContent(args[0])
 }

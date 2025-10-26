@@ -28,6 +28,8 @@ type model struct {
 	selectedIndex    int
 	// Auto-slash modal behavior
 	isInSlashMode bool // Tracks if we're in slash command mode
+	// Viewport focus state
+	viewportFocused bool // Tracks if the viewport has focus for scrolling
 }
 
 // NewProgram creates a Bubble Tea program configured for fullscreen (AltScreen).

@@ -56,6 +56,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Handle mouse events for viewport scrolling
+	if mouseMsg, ok := msg.(tea.MouseMsg); ok {
+		switch mouseMsg.Type {
+		case tea.MouseWheelUp:
+			// Scroll viewport when mouse wheel is used, regardless of explicit focus
+			// This allows mouse wheel scrolling without having to specifically focus the viewport
+			m.viewport.LineUp(3) // Scroll 3 lines up
+			m.viewportFocused = true // Mark that viewport is being interacted with
+			return m, nil
+		case tea.MouseWheelDown:
+			// Scroll viewport when mouse wheel is used
+			m.viewport.LineDown(3) // Scroll 3 lines down
+			m.viewportFocused = true // Mark that viewport is being interacted with
+			return m, nil
+		}
+	}
+
 	switch v := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.handleWindowSizeMsg(v)
@@ -197,10 +214,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(tiCmd, vpCmd)
 }
 
-// formatMessagesHelper joins messages with newlines for display in the viewport
-func formatMessagesHelper(messages []string) string {
-	return strings.Join(messages, "\n")
-}
+
 
 // View renders the UI components
 func (m model) View() string {
