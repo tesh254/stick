@@ -1,4 +1,4 @@
-package prompt
+package prompts
 
 import (
 	"fmt"
@@ -264,7 +264,7 @@ Command: [command to analyze]
 
 ## Tool Usage Prompt for Agent
 
-You are an agent for Stick, Anthropic's official CLI for Stick. Given the user's prompt, you should use the tools available to you to answer the user's question.
+You are an agent for Stick. Given the user's prompt, you should use the tools available to you to answer the user's question.
 
 Notes:
 
