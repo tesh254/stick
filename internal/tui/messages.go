@@ -210,20 +210,24 @@ func (m *model) handleEnterKey() {
 			}
 		} else {
 			// Check if input looks like a function call by trying to parse it
-			result, err := m.processFunctionCall(input)
+            result, err := m.processFunctionCall(input)
 
-			if err != nil {
-				// Function call failed, display the input and error
-				m.messages = append(m.messages, prefix+input)
-				m.messages = append(m.messages, "Error: "+err.Error())
-			} else if result != "" {
-				// Function call succeeded, display input and result
-				m.messages = append(m.messages, prefix+input)
-				m.messages = append(m.messages, "Function call result: "+result)
-			} else {
-				// Regular message, not a function call
-				m.messages = append(m.messages, prefix+input)
-			}
+            if err != nil {
+                // Function call failed, display the input and styled error block
+                m.messages = append(m.messages, prefix+input)
+                if result != "" {
+                    m.messages = append(m.messages, result)
+                } else {
+                    m.messages = append(m.messages, "Error: "+err.Error())
+                }
+            } else if result != "" {
+                // Function call succeeded, display input and styled result block
+                m.messages = append(m.messages, prefix+input)
+                m.messages = append(m.messages, result)
+            } else {
+                // Regular message, not a function call
+                m.messages = append(m.messages, prefix+input)
+            }
 		}
 
 		// Add the input to command history
@@ -278,21 +282,29 @@ func (m *model) processFunctionCall(input string) (string, error) {
 	}
 
 	// If a function call was recognized
-	if parsed.HasFunction && parsed.FunctionName != "" {
-		// Enforce case-sensitive function name detection in the TUI layer
-		funcs := m.functionRegistry.GetFunctions()
-		if _, exists := funcs[parsed.FunctionName]; !exists {
-			// Maintain current error reporting for truly unknown functions in proper call syntax
-			return "", fmt.Errorf("unknown function: %s", parsed.FunctionName)
-		}
+    if parsed.HasFunction && parsed.FunctionName != "" {
+        // Enforce case-sensitive function name detection in the TUI layer
+        funcs := m.functionRegistry.GetFunctions()
+        if _, exists := funcs[parsed.FunctionName]; !exists {
+            // Maintain current error reporting for truly unknown functions in proper call syntax
+            fr := NewFunctionRenderer()
+            styled := fr.renderFunctionOrToolResult(parsed.FunctionName, strings.Join(parsed.Arguments, ", "), "", true)
+            return styled, fmt.Errorf("unknown function: %s", parsed.FunctionName)
+        }
 
-		// Valid function call; support empty and parameterized calls
-		result, err := m.functionRegistry.Call(parsed.FunctionName, parsed.Arguments)
-		if err != nil {
-			return "", err
-		}
-		return result, nil
-	}
+        // Valid function call; support empty and parameterized calls
+        fr := NewFunctionRenderer()
+        // Optionally show the function name block then the result block
+        nameBlock := fr.RenderFunctionName(parsed.FunctionName, parsed.Arguments)
+        resultBlock, err := fr.ExecuteAndRender(m.functionRegistry, parsed.FunctionName, parsed.Arguments, &CallOptions{CaseSensitive: true})
+        if err != nil {
+            // Combine name and error block
+            combined := lipgloss.JoinVertical(lipgloss.Left, nameBlock, resultBlock)
+            return combined, err
+        }
+        combined := lipgloss.JoinVertical(lipgloss.Left, nameBlock, resultBlock)
+        return combined, nil
+    }
 
 	// Not a function call -> treat as regular text
 	return "", nil

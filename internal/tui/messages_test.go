@@ -52,8 +52,8 @@ func TestProcessFunctionCall_ValidEmptyCall(t *testing.T) {
     if err != nil {
         t.Fatalf("unexpected error: %v", err)
     }
-    if result != "" {
-        t.Fatalf("expected empty result for echo(), got %q", result)
+    if !strings.Contains(result, "Function Result") {
+        t.Fatalf("expected styled output to include 'Function Result', got %q", result)
     }
 }
 
@@ -63,8 +63,8 @@ func TestProcessFunctionCall_ValidParameterizedCall(t *testing.T) {
     if err != nil {
         t.Fatalf("unexpected error: %v", err)
     }
-    if result != "text" {
-        t.Fatalf("expected 'text', got %q", result)
+    if !strings.Contains(result, "Function Result") || !strings.Contains(result, "text") {
+        t.Fatalf("styled output missing expected content, got %q", result)
     }
 }
 
@@ -96,8 +96,8 @@ func TestProcessFunctionCall_MultiWordWithFunctionCall(t *testing.T) {
     if err != nil {
         t.Fatalf("unexpected error: %v", err)
     }
-    if result != "4" {
-        t.Fatalf("expected '4', got %q", result)
+    if !strings.Contains(result, "Function Result") || !strings.Contains(result, "4") {
+        t.Fatalf("styled output missing expected content, got %q", result)
     }
 }
 

@@ -157,18 +157,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					messages = append(messages, response)
 				}
             } else {
-                // Use the shared function call processor to enforce strict syntax rules
-                callResult, err := m.processFunctionCall(input)
-                if err != nil {
-                    messages = append(messages, prefix+input)
-                    messages = append(messages, "Error: "+err.Error())
-                } else if callResult != "" {
-                    messages = append(messages, prefix+input)
-                    messages = append(messages, "Function call result: "+callResult)
+            // Use the shared function call processor to enforce strict syntax rules
+            callResult, err := m.processFunctionCall(input)
+            if err != nil {
+                messages = append(messages, prefix+input)
+                if callResult != "" {
+                    messages = append(messages, callResult)
                 } else {
-                    // Regular text input
-                    messages = append(messages, prefix+input)
+                    messages = append(messages, "Error: "+err.Error())
                 }
+            } else if callResult != "" {
+                messages = append(messages, prefix+input)
+                messages = append(messages, callResult)
+            } else {
+                // Regular text input
+                messages = append(messages, prefix+input)
+            }
             }
 
 			// Add the input to command history
