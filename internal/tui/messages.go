@@ -22,11 +22,11 @@ func (m *model) handleWindowSizeMsg(v tea.WindowSizeMsg) {
 	// Fullscreen: use the whole terminal. Viewport height is terminal minus input + gap.
 	m.viewport.Width = v.Width
 	m.textarea.SetWidth(v.Width)
-	
+
 	// Calculate the height needed for non-viewport components
 	textAreaHeight := m.textarea.Height()
 	gapHeight := lipgloss.Height(gap)
-	
+
 	// If modal is shown, we need to reserve space for it as well
 	var modalReservedHeight int
 	if m.showSearchModal {
@@ -36,7 +36,7 @@ func (m *model) handleWindowSizeMsg(v tea.WindowSizeMsg) {
 	} else {
 		modalReservedHeight = 0
 	}
-	
+
 	totalNonViewportHeight := textAreaHeight + gapHeight + modalReservedHeight
 	m.viewport.Height = v.Height - totalNonViewportHeight
 
@@ -63,10 +63,10 @@ func (m *model) handleKeyMsg(v tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.viewportFocused {
 		switch v.Type {
 		case tea.KeyUp:
-			m.viewport.LineUp(1)
+			m.viewport.ScrollUp(1)
 			return *m, nil
 		case tea.KeyDown:
-			m.viewport.LineDown(1)
+			m.viewport.ScrollDown(1)
 			return *m, nil
 		case tea.KeyPgUp:
 			m.viewport.PageUp()
@@ -121,7 +121,7 @@ func (m *model) handleKeyMsg(v tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.handleUpArrow()
 		} else {
 			// If viewport is focused, scroll up
-			m.viewport.LineUp(1)
+			m.viewport.ScrollUp(1)
 		}
 	case tea.KeyDown:
 		// Only navigate command history if viewport is focused
@@ -129,7 +129,7 @@ func (m *model) handleKeyMsg(v tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.handleDownArrow()
 		} else {
 			// If viewport is focused, scroll down
-			m.viewport.LineDown(1)
+			m.viewport.ScrollDown(1)
 		}
 	case tea.KeyPgUp:
 		// If viewport is focused, page up; otherwise, treat as up arrow for history
@@ -243,16 +243,58 @@ func (m *model) handleEnterKey() {
 
 // processFunctionCall processes function calls in the input string
 func (m *model) processFunctionCall(input string) (string, error) {
-	p := functions.Parser{}
-	name, args, err := p.Parse(input)
-
-	// If parsing succeeds and no error, it's a function call
-	if err == nil && name != "" {
-		// Attempt to call the function
-		return m.functionRegistry.Call(name, args)
+	s := strings.TrimSpace(input)
+	if s == "" {
+		return "", nil
 	}
 
-	// Not a function call, return empty string and no error
+	openIdx := strings.Index(s, "(")
+	if openIdx == -1 {
+		// With no parentheses, always treat input as plain text (single or multi-word),
+		// even if it matches a registered function name. Detection only occurs with '('.
+		return "", nil
+	}
+
+	// If there is whitespace immediately before '(', treat as plain text (no function)
+	if openIdx > 0 {
+		prev := s[openIdx-1]
+		if prev == ' ' || prev == '\t' || prev == '\n' || prev == '\r' {
+			return "", nil
+		}
+	}
+
+	p := functions.Parser{}
+	parsed := p.ParseDetailed(s)
+
+	// Enhance error messages with exact positions where possible
+	if parsed.Error != nil {
+		// If we have an opening parenthesis but no matching closing parenthesis
+		closeIdx := strings.LastIndex(s, ")")
+		if openIdx != -1 && (closeIdx == -1 || closeIdx < openIdx) {
+			return "", fmt.Errorf("syntax error: missing closing ')' for '(' at position %d", openIdx)
+		}
+		// Propagate original parser error for other cases
+		return "", parsed.Error
+	}
+
+	// If a function call was recognized
+	if parsed.HasFunction && parsed.FunctionName != "" {
+		// Enforce case-sensitive function name detection in the TUI layer
+		funcs := m.functionRegistry.GetFunctions()
+		if _, exists := funcs[parsed.FunctionName]; !exists {
+			// Maintain current error reporting for truly unknown functions in proper call syntax
+			return "", fmt.Errorf("unknown function: %s", parsed.FunctionName)
+		}
+
+		// Valid function call; support empty and parameterized calls
+		result, err := m.functionRegistry.Call(parsed.FunctionName, parsed.Arguments)
+		if err != nil {
+			return "", err
+		}
+		return result, nil
+	}
+
+	// Not a function call -> treat as regular text
 	return "", nil
 }
 
@@ -405,7 +447,7 @@ func (m *model) startSlashMode() {
 	m.selectedIndex = 0
 	m.populateSlashCommands()
 	m.updateFilteredCommands()
-	
+
 	// Adjust viewport height to account for modal appearance
 	m.adjustViewportForModal()
 }
@@ -417,7 +459,7 @@ func (m *model) endSlashMode() {
 	m.searchInput = ""
 	m.filteredCommands = []string{}
 	m.selectedIndex = 0
-	
+
 	// Adjust viewport height to account for modal disappearance
 	m.adjustViewportForModal()
 }
@@ -426,7 +468,7 @@ func (m *model) endSlashMode() {
 func (m *model) adjustViewportForModal() {
 	textAreaHeight := m.textarea.Height()
 	gapHeight := lipgloss.Height(gap)
-	
+
 	// Calculate the height needed for non-viewport components based on modal state
 	var modalReservedHeight int
 	if m.showSearchModal {
@@ -435,7 +477,7 @@ func (m *model) adjustViewportForModal() {
 	} else {
 		modalReservedHeight = 0
 	}
-	
+
 	totalNonViewportHeight := textAreaHeight + gapHeight + modalReservedHeight
 	// Calculate terminal height from current state
 	terminalHeight := m.viewport.Height + textAreaHeight + gapHeight
@@ -443,7 +485,7 @@ func (m *model) adjustViewportForModal() {
 	if m.showSearchModal {
 		terminalHeight += modalReservedHeight // Add back the modal height we were already accounting for
 	}
-	
+
 	m.viewport.Height = terminalHeight - totalNonViewportHeight
 }
 

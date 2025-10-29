@@ -21,40 +21,40 @@ type Tool struct {
 }
 
 type ToolMetadata struct {
-    // Label is a concise, Go-style CamelCase name (e.g., RunCommand).
-    Label string
-    // Info describes the purpose and context where the tool is useful.
-    Info string
-    // Category groups tools logically (e.g., Shell, Filesystem, Web, Project, Functions).
-    Category string
-    // Params specify input arguments, their types, and whether they are required.
-    Params []ToolParam
-    // Returns describes the expected output type and its meaning.
-    Returns ToolReturn
-    // Actions explains what the tool does in concrete terms.
-    Actions []string
-    // Examples provide quick usage hints for the agent.
-    Examples []string
+	// Label is a concise, Go-style CamelCase name (e.g., RunCommand).
+	Label string
+	// Info describes the purpose and context where the tool is useful.
+	Info string
+	// Category groups tools logically (e.g., Shell, Filesystem, Web, Project, Functions).
+	Category string
+	// Params specify input arguments, their types, and whether they are required.
+	Params []ToolParam
+	// Returns describes the expected output type and its meaning.
+	Returns ToolReturn
+	// Actions explains what the tool does in concrete terms.
+	Actions []string
+	// Examples provide quick usage hints for the agent.
+	Examples []string
 }
 
 // ToolParam defines a single input argument that a tool accepts.
 type ToolParam struct {
-    // Name is the argument name (snake_case recommended for external call schema).
-    Name string
-    // Type is a logical type hint: string, number, boolean, array, object, path, command, json.
-    Type string
-    // Description explains what the argument represents and any constraints.
-    Description string
-    // Required indicates whether the argument must be provided.
-    Required bool
+	// Name is the argument name (snake_case recommended for external call schema).
+	Name string
+	// Type is a logical type hint: string, number, boolean, array, object, path, command, json.
+	Type string
+	// Description explains what the argument represents and any constraints.
+	Description string
+	// Required indicates whether the argument must be provided.
+	Required bool
 }
 
 // ToolReturn defines the expected return value for a tool.
 type ToolReturn struct {
-    // Type is a logical type hint: string, number, boolean, array, object.
-    Type string
-    // Description explains the content of the returned value.
-    Description string
+	// Type is a logical type hint: string, number, boolean, array, object.
+	Type string
+	// Description explains the content of the returned value.
+	Description string
 }
 
 type Parameters struct {
@@ -139,30 +139,6 @@ type ToolCallDelta struct {
 		Arguments string `json:"arguments,omitempty"`
 	} `json:"function"`
 }
-
-// Example tool definition
-// func createSearchBookTool() Tool {
-// 	return Tool{
-// 		Type: "function",
-// 		Function: FunctionDefinition{
-// 			Name:        "search_gutenberg_books",
-// 			Description: "Search for books in the Project Gutenberg library",
-// 			Parameters: Parameters{
-// 				Type: "object",
-// 				Properties: map[string]Property{
-// 					"search_terms": {
-// 						Type:        "array",
-// 						Description: "List of search terms to find books",
-// 						Items: &Item{
-// 							Type: "string",
-// 						},
-// 					},
-// 				},
-// 				Required: []string{"search_terms"},
-// 			},
-// 		},
-// 	}
-// }
 
 // Client implementation
 type Client struct {

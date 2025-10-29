@@ -8,9 +8,21 @@ import (
 )
 
 func (Parser) Parse(input string) (string, []string, error) {
+	result := Parser{}.ParseDetailed(input)
+	return result.FunctionName, result.Arguments, result.Error
+}
+
+// ParseDetailed provides detailed parsing results including whether a function was actually found
+func (Parser) ParseDetailed(input string) ParseResult {
 	s := strings.TrimSpace(input)
 	if s == "" {
-		return "", nil, errors.New("empty input")
+		return ParseResult{
+			FunctionName: "",
+			Arguments:    nil,
+			HasFunction:  false,
+			OriginalText: input,
+			Error:        errors.New("empty input"),
+		}
 	}
 
 	// Look for function call pattern anywhere in the string
@@ -19,9 +31,21 @@ func (Parser) Parse(input string) (string, []string, error) {
 	if open == -1 {
 		// If no parentheses found, check if the entire string is a function name
 		if !isIdentifier(s) {
-			return "", nil, fmt.Errorf("invalid function name: %q", s)
+			return ParseResult{
+				FunctionName: "",
+				Arguments:    nil,
+				HasFunction:  false,
+				OriginalText: input,
+				Error:        fmt.Errorf("invalid function name: %q", s),
+			}
 		}
-		return s, []string{}, nil
+		return ParseResult{
+			FunctionName: s,
+			Arguments:    []string{},
+			HasFunction:  true, // Has a function name but no arguments
+			OriginalText: input,
+			Error:        nil,
+		}
 	}
 
 	// Find the function name before the opening parenthesis
@@ -61,25 +85,55 @@ func (Parser) Parse(input string) (string, []string, error) {
 	}
 
 	if open <= nameStart || close < 0 || close < open {
-		return "", nil, fmt.Errorf("invalid call syntax: %q", s)
+		return ParseResult{
+			FunctionName: "",
+			Arguments:    nil,
+			HasFunction:  false,
+			OriginalText: input,
+			Error:        fmt.Errorf("invalid call syntax: %q", s),
+		}
 	}
 
 	if !isIdentifier(name) {
-		return "", nil, fmt.Errorf("invalid function name: %q", name)
+		return ParseResult{
+			FunctionName: "",
+			Arguments:    nil,
+			HasFunction:  false,
+			OriginalText: input,
+			Error:        fmt.Errorf("invalid function name: %q", name),
+		}
 	}
 
 	// Extract arguments from between the parentheses
 	argStr := strings.TrimSpace(s[open+1 : close])
 	if argStr == "" {
-		return name, []string{}, nil
+		return ParseResult{
+			FunctionName: name,
+			Arguments:    []string{},
+			HasFunction:  true,
+			OriginalText: input,
+			Error:        nil,
+		}
 	}
 
 	args, err := splitArgs(argStr)
 	if err != nil {
-		return "", nil, err
+		return ParseResult{
+			FunctionName: "",
+			Arguments:    nil,
+			HasFunction:  false,
+			OriginalText: input,
+			Error:        err,
+		}
 	}
 
-	return name, args, nil
+	return ParseResult{
+		FunctionName: name,
+		Arguments:    args,
+		HasFunction:  true,
+		OriginalText: input,
+		Error:        nil,
+	}
 }
 
 func isIdentifier(s string) bool {

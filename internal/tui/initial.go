@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -61,8 +63,7 @@ func setupTextarea() textarea.Model {
 // setupViewport configures the message display area
 func setupViewport() viewport.Model {
 	vp := viewport.New(30, 5)
-	vp.SetContent(`Welcome to stick!
-Type a message and press Enter to send.`)
+	vp.SetContent(fmt.Sprintf("%s\n Type a message and press Enter to send.", AGENT_ASCII))
 
 	return vp
 }

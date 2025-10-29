@@ -1,13 +1,12 @@
 package tui
 
 import (
-	"fmt"
-	"strings"
+    "fmt"
+    "strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/tesh254/stick/internal/functions"
-	"github.com/tesh254/stick/internal/utils"
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/charmbracelet/lipgloss"
+    "github.com/tesh254/stick/internal/utils"
 )
 
 // Update handles messages and updates the model accordingly
@@ -157,33 +156,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if response != "" {
 					messages = append(messages, response)
 				}
-			} else {
-				// Check if input looks like a function call by trying to parse it
-				p := functions.Parser{}
-				name, args, err := p.Parse(input)
-
-				// If parsing succeeds and no error, it's a function call
-				if err == nil && name != "" {
-					// Attempt to call the function
-					result, err := functionRegistry.Call(name, args)
-
-					if err != nil {
-						// Function call failed, display the input and error
-						messages = append(messages, prefix+input)
-						messages = append(messages, "Error: "+err.Error())
-					} else if result != "" {
-						// Function call succeeded, display input and result
-						messages = append(messages, prefix+input)
-						messages = append(messages, "Function call result: "+result)
-					} else {
-						// Regular message, not a function call
-						messages = append(messages, prefix+input)
-					}
-				} else {
-					// Not a function call, regular message
-					messages = append(messages, prefix+input)
-				}
-			}
+            } else {
+                // Use the shared function call processor to enforce strict syntax rules
+                callResult, err := m.processFunctionCall(input)
+                if err != nil {
+                    messages = append(messages, prefix+input)
+                    messages = append(messages, "Error: "+err.Error())
+                } else if callResult != "" {
+                    messages = append(messages, prefix+input)
+                    messages = append(messages, "Function call result: "+callResult)
+                } else {
+                    // Regular text input
+                    messages = append(messages, prefix+input)
+                }
+            }
 
 			// Add the input to command history
 			commandHistory = append(commandHistory, input)

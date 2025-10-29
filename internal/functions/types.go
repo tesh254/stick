@@ -28,4 +28,13 @@ func (r *Registry) GetMaxArgs(name string) (int, bool) {
 	return max, exists
 }
 
+// ParseResult contains the result of parsing a function call
+type ParseResult struct {
+	FunctionName string
+	Arguments    []string
+	HasFunction  bool
+	OriginalText string
+	Error        error
+}
+
 type Parser struct{}
