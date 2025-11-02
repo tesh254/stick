@@ -1,13 +1,15 @@
 package tui
 
 import (
-	"fmt"
-	"strings"
+    "context"
+    "fmt"
+    "strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/tesh254/stick/internal/functions"
-	"github.com/tesh254/stick/internal/utils"
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/charmbracelet/lipgloss"
+    "github.com/tesh254/stick/internal/functions"
+    "github.com/tesh254/stick/internal/utils"
+    "github.com/tesh254/stick/internal/db"
 )
 
 const gap = "\n\n"
@@ -196,53 +198,104 @@ func (m *model) handleDownArrow() {
 
 // handleEnterKey processes the Enter key press in the textarea
 func (m *model) handleEnterKey() {
-	input := m.textarea.Value()
-	if input != "" {
-		username := utils.GetUser()
-		prefix := m.senderStyle.Render("{" + username + "}: ")
+    input := m.textarea.Value()
+    if input != "" {
+        username := utils.GetUser()
+        prefix := m.senderStyle.Render("{" + username + "}: ")
 
 		// Check if input is a slash command first
-		if strings.HasPrefix(input, "/") {
-			response := m.processSlashCommand(input)
-			m.messages = append(m.messages, prefix+input)
-			if response != "" {
-				m.messages = append(m.messages, response)
-			}
-		} else {
-			// Check if input looks like a function call by trying to parse it
-            result, err := m.processFunctionCall(input)
+        // Always display and store the user's input
+        m.messages = append(m.messages, prefix+input)
+        var parentMsg *db.Message
+        if m.repoManager != nil {
+            userMsg := m.buildStorageMessage(db.User, input)
+            parentMsg = userMsg
+            m.storageMessages = append(m.storageMessages, userMsg)
+            m.enqueueStorageMessage(userMsg)
+        }
 
-            if err != nil {
-                // Function call failed, display the input and styled error block
-                m.messages = append(m.messages, prefix+input)
-                if result != "" {
-                    m.messages = append(m.messages, result)
-                } else {
-                    m.messages = append(m.messages, "Error: "+err.Error())
+        if strings.HasPrefix(input, "/") {
+            response := m.processSlashCommand(input)
+            if response != "" {
+                m.messages = append(m.messages, response)
+                if m.repoManager != nil {
+                    asstMsg := m.buildStorageMessage(db.Assistant, response)
+                    // Link assistant response to triggering user message
+                    if parentMsg != nil {
+                        pmid := parentMsg.ID
+                        asstMsg.ParentMessage = &pmid
+                    }
+                    m.storageMessages = append(m.storageMessages, asstMsg)
+                    m.enqueueStorageMessage(asstMsg)
                 }
-            } else if result != "" {
-                // Function call succeeded, display input and styled result block
-                m.messages = append(m.messages, prefix+input)
-                m.messages = append(m.messages, result)
-            } else {
-                // Regular message, not a function call
-                m.messages = append(m.messages, prefix+input)
             }
-		}
+        } else {
+            // Attempt function call pipeline to get both display and raw storage content
+            if res, ok := m.processFunctionCallPipeline(input); ok {
+                if res.IsError {
+                    if res.Display != "" {
+                        m.messages = append(m.messages, res.Display)
+                    } else {
+                        m.messages = append(m.messages, "Error: "+res.Err.Error())
+                    }
+                    // Store assistant error message
+                    if m.repoManager != nil {
+                        content := res.RawResult
+                        if content == "" && res.Err != nil {
+                            content = res.Err.Error()
+                        }
+                        asstMsg := m.buildStorageMessage(db.Assistant, content)
+                        // Link assistant result to triggering user message
+                        if parentMsg != nil {
+                            pmid := parentMsg.ID
+                            asstMsg.ParentMessage = &pmid
+                        }
+                        m.storageMessages = append(m.storageMessages, asstMsg)
+                        m.enqueueStorageMessage(asstMsg)
+                        // Persist call event metadata linked to the user's message
+                        if parentMsg != nil && res.FunctionName != "" {
+                            ev := m.buildCallEvent(parentMsg, res.FunctionName, res.Arguments, res)
+                            m.enqueueCallEvent(ev)
+                        }
+                    }
+                } else {
+                    m.messages = append(m.messages, res.Display)
+                    // Store assistant success message (raw result)
+                    if m.repoManager != nil {
+                        asstMsg := m.buildStorageMessage(db.Assistant, res.RawResult)
+                        // Link assistant result to triggering user message
+                        if parentMsg != nil {
+                            pmid := parentMsg.ID
+                            asstMsg.ParentMessage = &pmid
+                        }
+                        m.storageMessages = append(m.storageMessages, asstMsg)
+                        m.enqueueStorageMessage(asstMsg)
+                        // Persist call event metadata linked to the user's message
+                        if parentMsg != nil && res.FunctionName != "" {
+                            ev := m.buildCallEvent(parentMsg, res.FunctionName, res.Arguments, res)
+                            m.enqueueCallEvent(ev)
+                        }
+                    }
+                }
+            }
+        }
 
 		// Add the input to command history
 		m.commandHistory = append(m.commandHistory, input)
 		m.historyIndex = -1 // Reset history index to current (empty) state
 
-		m.viewport.SetContent(m.wrapStyle.Render(formatMessages(m.messages)))
-		m.textarea.Reset()
-		m.viewport.GotoBottom()
+        m.viewport.SetContent(m.wrapStyle.Render(formatMessages(m.messages)))
+        m.textarea.Reset()
+        m.viewport.GotoBottom()
 
-		// Exit slash mode after command is executed
-		if m.isInSlashMode {
-			m.endSlashMode()
-		}
-	}
+        // Exit slash mode after command is executed
+        if m.isInSlashMode {
+            m.endSlashMode()
+        }
+
+        // Lightweight consistency validation (non-blocking)
+        _ = m.validateConsistency()
+    }
 }
 
 // processFunctionCall processes function calls in the input string
@@ -312,12 +365,42 @@ func (m *model) processFunctionCall(input string) (string, error) {
 
 // processSlashCommand processes slash commands like /functions and /help_{function}
 func (m *model) processSlashCommand(input string) string {
-	input = strings.TrimSpace(input)
+    input = strings.TrimSpace(input)
 
-	// Handle /functions command
-	if input == "/functions" {
-		return m.listFunctions()
-	}
+    // Handle /functions command
+    if input == "/functions" {
+        return m.listFunctions()
+    }
+
+    // Reload and reconstruct current conversation from DB
+    if input == "/reload" {
+        if m.repoManager == nil {
+            return "Persistence not configured; nothing to reload."
+        }
+        if err := m.LoadConversationFromDB(m.conversationID); err != nil {
+            return fmt.Sprintf("Reload failed: %v", err)
+        }
+        return "Conversation reloaded from storage."
+    }
+
+    // Replay the most recent recorded function/tool call
+    if input == "/replay_last" {
+        if m.repoManager == nil {
+            return "Persistence not configured; cannot replay."
+        }
+        ctx := context.Background()
+        calls, err := m.repoManager.Calls().GetByConversationID(ctx, m.conversationID)
+        if err != nil || len(calls) == 0 {
+            return "No calls recorded to replay."
+        }
+        ev := calls[len(calls)-1]
+        name, rendered, _ := m.ReplayCallFromEvent(ev)
+        m.messages = append(m.messages, name)
+        m.messages = append(m.messages, rendered)
+        m.viewport.SetContent(m.wrapStyle.Render(formatMessages(m.messages)))
+        m.viewport.GotoBottom()
+        return "Replayed last call from storage."
+    }
 
 	// Handle /help_{function} command
 	if strings.HasPrefix(input, "/help_") {
@@ -325,8 +408,8 @@ func (m *model) processSlashCommand(input string) string {
 		return m.getFunctionHelp(functionName)
 	}
 
-	// Unknown slash command
-	return fmt.Sprintf("Unknown command: %s. Available commands: /functions, /help_{function}", input)
+    // Unknown slash command
+    return fmt.Sprintf("Unknown command: %s. Available commands: /functions, /help_{function}, /reload, /replay_last", input)
 }
 
 // listFunctions returns a list of all registered functions
@@ -503,11 +586,13 @@ func (m *model) adjustViewportForModal() {
 
 // populateSlashCommands populates the list of available slash commands
 func (m *model) populateSlashCommands() {
-	// Define the available slash commands
-	slashCommands := []string{
-		"/functions",
-		"/help_",
-	}
+    // Define the available slash commands
+    slashCommands := []string{
+        "/functions",
+        "/help_",
+        "/reload",
+        "/replay_last",
+    }
 
 	// Add help commands for each registered function
 	if m.functionRegistry != nil {

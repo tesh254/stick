@@ -19,6 +19,7 @@ type mockRepoManager struct{}
 func (m *mockRepoManager) Conversations() db.ConversationRepository                { return &mockConvRepo{} }
 func (m *mockRepoManager) Messages() db.MessageRepository                          { return &mockMsgRepo{} }
 func (m *mockRepoManager) Usage() db.UsageRepository                               { return &mockUsageRepo{} }
+func (m *mockRepoManager) Calls() db.CallRepository                                { return &mockCallRepo{} }
 func (m *mockRepoManager) BeginTx(_ context.Context) (db.RepositoryManager, error) { return m, nil }
 func (m *mockRepoManager) Commit() error                                           { return nil }
 func (m *mockRepoManager) Rollback() error                                         { return nil }
@@ -75,6 +76,20 @@ func (r *mockUsageRepo) Delete(_ context.Context, _ uuidv7.UUID) error          
 func (r *mockUsageRepo) GetUsageSummary(_ context.Context, limit, offset int) ([]*db.Usage, error) {
 	return []*db.Usage{}, nil
 }
+
+type mockCallRepo struct{}
+
+func (r *mockCallRepo) Create(_ context.Context, _ *db.CallEvent) error { return nil }
+func (r *mockCallRepo) GetByConversationID(_ context.Context, _ uuidv7.UUID) ([]*db.CallEvent, error) {
+	return []*db.CallEvent{}, nil
+}
+func (r *mockCallRepo) GetByParentMessageID(_ context.Context, _ uuidv7.UUID) ([]*db.CallEvent, error) {
+	return []*db.CallEvent{}, nil
+}
+func (r *mockCallRepo) UpdateStatus(_ context.Context, _ uuidv7.UUID, _ db.CallStatus, _, _ string, _ time.Time, _ int64) error {
+	return nil
+}
+func (r *mockCallRepo) DeleteByConversationID(_ context.Context, _ uuidv7.UUID) error { return nil }
 
 func TestHealthEndpoint(t *testing.T) {
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})

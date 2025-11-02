@@ -16,11 +16,15 @@ type Conversation struct {
 }
 
 type Message struct {
-	ID           uuidv7.UUID `json:"id"`
-	Conversation uuidv7.UUID `json:"conversation"`
-	Content      string      `json:"content"`
-	Role         Role        `json:"role"`
-	CreatedAt    time.Time   `json:"created_at"`
+    ID           uuidv7.UUID `json:"id"`
+    Conversation uuidv7.UUID `json:"conversation"`
+    Content      string      `json:"content"`
+    Role         Role        `json:"role"`
+    CreatedAt    time.Time   `json:"created_at"`
+    // Seq maintains per-conversation ordering for fast reconstruction.
+    Seq          int64       `json:"seq"`
+    // ParentMessage optionally links replies or assistant outputs to a triggering message.
+    ParentMessage *uuidv7.UUID `json:"parent_message,omitempty"`
 }
 
 type Usage struct {
@@ -68,4 +72,37 @@ func FromString(s string) (Role, error) {
 	default:
 		return "", fmt.Errorf("invalid role: %q", s)
 	}
+}
+
+// CallType defines the kind of execution recorded.
+type CallType string
+
+const (
+    CallTypeFunction CallType = "function"
+    CallTypeTool     CallType = "tool"
+)
+
+// CallStatus records execution outcomes.
+type CallStatus string
+
+const (
+    CallStatusPending CallStatus = "pending"
+    CallStatusSuccess CallStatus = "success"
+    CallStatusError   CallStatus = "error"
+)
+
+// CallEvent captures function/tool invocation metadata for reconstruction and replay.
+type CallEvent struct {
+    ID              uuidv7.UUID  `json:"id"`
+    Conversation    uuidv7.UUID  `json:"conversation"`
+    ParentMessage   *uuidv7.UUID `json:"parent_message,omitempty"`
+    Type            CallType     `json:"type"`
+    Name            string       `json:"name"`
+    ParamsJSON      string       `json:"params_json"`
+    Status          CallStatus   `json:"status"`
+    ResultRaw       string       `json:"result_raw"`
+    Error           string       `json:"error"`
+    StartedAt       time.Time    `json:"started_at"`
+    CompletedAt     time.Time    `json:"completed_at"`
+    DurationMS      int64        `json:"duration_ms"`
 }

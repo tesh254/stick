@@ -6,6 +6,12 @@ var (
 	YellowTxt = lipgloss.NewStyle().Foreground(lipgloss.Color("#F4991A"))
 	YellowBg  = lipgloss.NewStyle().Background(lipgloss.Color("#F4991A"))
 	YellowHex = "#F4991A"
+	GreenText = lipgloss.NewStyle().Foreground(lipgloss.Color("#344F1F"))
+	GreenBg   = lipgloss.NewStyle().Background(lipgloss.Color("#344F1F"))
+	GreenHex  = "#344F1F"
+	RedText   = lipgloss.NewStyle().Foreground(lipgloss.Color("#E62727"))
+	RedBg     = lipgloss.NewStyle().Background(lipgloss.Color("#E62727"))
+	RedHex    = "#E62727"
 )
 
 var (
@@ -23,35 +29,29 @@ var (
 			PaddingBottom(1)
 )
 
+// Tool styles
 var (
-	toolCallHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("208")). // Orange
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("208")).
-				Padding(0, 1).
-				MarginBottom(1)
+	toolCallStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color(YellowHex)). // Orange
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(YellowHex)).
+			Padding(1, 2).
+			MarginBottom(0)
 
-	toolCallBodyStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")). // Gray
-				Padding(0, 1)
+	toolResultStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color(GreenHex)). // Green
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(GreenHex)).
+			Padding(1, 2).
+			MarginBottom(0)
 
-	toolResultHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("69")). // Bright blue
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("69")).
-				Padding(0, 1).
-				MarginBottom(1)
-
-	toolResultBodyStyle = lipgloss.NewStyle().
-				Padding(0, 1)
-
-	toolErrorHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("196")). // Red
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("196")).
-				Padding(0, 1).
-				MarginBottom(1)
+	toolErrorStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color(RedHex)). // Red
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(RedHex)).
+			Padding(1, 2).
+			MarginBottom(0)
 )

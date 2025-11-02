@@ -7,24 +7,19 @@ import (
 )
 
 func renderFunctionName(name, args string) string {
-	header := toolCallHeaderStyle.Render(fmt.Sprintf("Running Function: %s", name))
-	nameText := lipgloss.NewStyle().Bold(true).Render(name)
-	argsText := toolCallBodyStyle.Render(args)
-	content := fmt.Sprintf("%s %s", nameText, argsText)
-	return lipgloss.JoinVertical(lipgloss.Left, header, content)
+	content := fmt.Sprintf("function call\n\n[INPUT]\nname => %s\nargs => %s", GreenText.Underline(true).Render(name), GreenText.Underline(true).Render(args))
+	contentText := toolCallStyle.Render(content)
+	return lipgloss.JoinVertical(lipgloss.Left, contentText)
 }
 
-func renderFunctionOrToolResult(name, args, result string, isError bool) string {
+func renderFunctionOrToolResult(_, _, result string, isError bool) string {
 	var header string
+	content := fmt.Sprintf("[OUTPUT]\n %s", result)
 	if isError {
-		header = toolErrorHeaderStyle.Render("Function Error")
+		header = toolErrorStyle.Render("⛔️ error\n\n", content)
 	} else {
-		header = toolResultBodyStyle.Render("Function Result")
+		header = toolResultStyle.Render("✅ success\n\n", content)
 	}
 
-	nameText := lipgloss.NewStyle().Bold(true).Render(name)
-	argsText := toolCallBodyStyle.Render(args)
-	resultText := toolResultBodyStyle.Render(result)
-	content := fmt.Sprintf("%s %s\n%s", nameText, argsText, resultText)
-	return lipgloss.JoinVertical(lipgloss.Left, header, content)
+	return lipgloss.JoinVertical(lipgloss.Left, header)
 }

@@ -11,8 +11,8 @@ import (
 
 // messageRepository implements MessageRepository
 type messageRepository struct {
-	db *sql.DB
-	tx *sql.Tx
+    db *sql.DB
+    tx *sql.Tx
 }
 
 // getExecer returns the appropriate execer (transaction or regular)
@@ -29,22 +29,33 @@ func (r *messageRepository) getExecer() interface {
 
 // Create creates a new message
 func (r *messageRepository) Create(ctx context.Context, message *Message) error {
-	query := `
-		INSERT INTO messages (id, conversation_id, content, role, created_at) 
-		VALUES (?, ?, ?, ?, ?)
-	`
-	
-	_, err := r.getExecer().ExecContext(ctx, query, message.ID.String(), message.Conversation.String(), message.Content, message.Role.String(), message.CreatedAt)
-	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
-	}
-	
-	return nil
+    // Compute next seq if not provided
+    if message.Seq == 0 {
+        var next int64
+        row := r.getExecer().QueryRowContext(ctx, `SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE conversation_id = ?`, message.Conversation.String())
+        if err := row.Scan(&next); err != nil {
+            return fmt.Errorf("failed to compute next seq: %w", err)
+        }
+        message.Seq = next
+    }
+    query := `
+        INSERT INTO messages (id, conversation_id, seq, parent_message_id, content, role, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `
+    var parent string
+    if message.ParentMessage != nil {
+        parent = message.ParentMessage.String()
+    }
+    _, err := r.getExecer().ExecContext(ctx, query, message.ID.String(), message.Conversation.String(), message.Seq, parent, message.Content, message.Role.String(), message.CreatedAt)
+    if err != nil {
+        return fmt.Errorf("failed to create message: %w", err)
+    }
+    return nil
 }
 
 // GetByConversationID retrieves all messages for a conversation
 func (r *messageRepository) GetByConversationID(ctx context.Context, conversationID uuidv7.UUID) ([]*Message, error) {
-	query := `SELECT id, conversation_id, content, role, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`
+    query := `SELECT id, conversation_id, seq, parent_message_id, content, role, created_at FROM messages WHERE conversation_id = ? ORDER BY seq ASC, created_at ASC`
 	
 	rows, err := r.getExecer().QueryContext(ctx, query, conversationID.String())
 	if err != nil {
@@ -53,17 +64,18 @@ func (r *messageRepository) GetByConversationID(ctx context.Context, conversatio
 	defer rows.Close()
 	
 	var messages []*Message
-	for rows.Next() {
-		var msgID string
-		var msg Message
-		var createdAt time.Time
-		var convID string
-		var roleStr string
-		
-		err := rows.Scan(&msgID, &convID, &msg.Content, &roleStr, &createdAt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan message: %w", err)
-		}
+    for rows.Next() {
+        var msgID string
+        var msg Message
+        var createdAt time.Time
+        var convID string
+        var roleStr string
+        var parentStr sql.NullString
+        
+        err := rows.Scan(&msgID, &convID, &msg.Seq, &parentStr, &msg.Content, &roleStr, &createdAt)
+        if err != nil {
+            return nil, fmt.Errorf("failed to scan message: %w", err)
+        }
 		
 		// Parse message ID
 		msgUUID, err := uuidv7.Parse(msgID)
@@ -79,11 +91,20 @@ func (r *messageRepository) GetByConversationID(ctx context.Context, conversatio
 		}
 		msg.Conversation = convUUID
 		
-		// Parse role
-		role, err := FromString(roleStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse message role: %w", err)
-		}
+        // Parent linkage
+        if parentStr.Valid && parentStr.String != "" {
+            pid, err := uuidv7.Parse(parentStr.String)
+            if err != nil {
+                return nil, fmt.Errorf("failed to parse parent_message_id: %w", err)
+            }
+            msg.ParentMessage = &pid
+        }
+
+        // Parse role
+        role, err := FromString(roleStr)
+        if err != nil {
+            return nil, fmt.Errorf("failed to parse message role: %w", err)
+        }
 		msg.Role = role
 		
 		msg.CreatedAt = createdAt
@@ -143,7 +164,7 @@ func (r *messageRepository) GetByID(ctx context.Context, id uuidv7.UUID) (*Messa
 
 // Update updates a message
 func (r *messageRepository) Update(ctx context.Context, id uuidv7.UUID, content string) error {
-	query := `UPDATE messages SET content = ? WHERE id = ?`
+    query := `UPDATE messages SET content = ? WHERE id = ?`
 	
 	result, err := r.getExecer().ExecContext(ctx, query, content, id.String())
 	if err != nil {
@@ -185,7 +206,7 @@ func (r *messageRepository) Delete(ctx context.Context, id uuidv7.UUID) error {
 
 // DeleteByConversationID deletes all messages for a conversation
 func (r *messageRepository) DeleteByConversationID(ctx context.Context, conversationID uuidv7.UUID) error {
-	query := `DELETE FROM messages WHERE conversation_id = ?`
+    query := `DELETE FROM messages WHERE conversation_id = ?`
 	
 	_, err := r.getExecer().ExecContext(ctx, query, conversationID.String())
 	if err != nil {
@@ -197,7 +218,7 @@ func (r *messageRepository) DeleteByConversationID(ctx context.Context, conversa
 
 // GetCountByConversationID retrieves the count of messages in a conversation
 func (r *messageRepository) GetCountByConversationID(ctx context.Context, conversationID uuidv7.UUID) (int, error) {
-	query := `SELECT COUNT(*) FROM messages WHERE conversation_id = ?`
+    query := `SELECT COUNT(*) FROM messages WHERE conversation_id = ?`
 	
 	var count int
 	err := r.getExecer().QueryRowContext(ctx, query, conversationID.String()).Scan(&count)

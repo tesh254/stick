@@ -41,12 +41,13 @@ type UsageRepository interface {
 
 // RepositoryManager provides access to all repositories
 type RepositoryManager interface {
-	Conversations() ConversationRepository
-	Messages() MessageRepository
-	Usage() UsageRepository
-	BeginTx(ctx context.Context) (RepositoryManager, error)
-	Commit() error
-	Rollback() error
+    Conversations() ConversationRepository
+    Messages() MessageRepository
+    Usage() UsageRepository
+    Calls() CallRepository
+    BeginTx(ctx context.Context) (RepositoryManager, error)
+    Commit() error
+    Rollback() error
 }
 
 // repositoryManager implements RepositoryManager
@@ -77,10 +78,17 @@ func (rm *repositoryManager) Messages() MessageRepository {
 }
 
 func (rm *repositoryManager) Usage() UsageRepository {
-	if rm.tx != nil {
-		return &usageRepository{tx: rm.tx}
-	}
-	return &usageRepository{db: rm.db.DB}
+    if rm.tx != nil {
+        return &usageRepository{tx: rm.tx}
+    }
+    return &usageRepository{db: rm.db.DB}
+}
+
+func (rm *repositoryManager) Calls() CallRepository {
+    if rm.tx != nil {
+        return &callRepository{tx: rm.tx}
+    }
+    return &callRepository{db: rm.db.DB}
 }
 
 func (rm *repositoryManager) BeginTx(ctx context.Context) (RepositoryManager, error) {

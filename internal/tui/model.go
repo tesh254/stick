@@ -2,24 +2,35 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/tesh254/stick/internal/functions"
+    "github.com/charmbracelet/bubbles/textarea"
+    "github.com/charmbracelet/bubbles/viewport"
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/charmbracelet/lipgloss"
+    "github.com/tesh254/stick/internal/functions"
+    "github.com/tesh254/stick/internal/db"
+    "github.com/dombox/uuidv7"
 )
 
 // model represents the state of the TUI application
 type model struct {
-	viewport         viewport.Model
-	messages         []string
-	commandHistory   []string
-	historyIndex     int
-	textarea         textarea.Model
-	senderStyle      lipgloss.Style
-	wrapStyle        lipgloss.Style
-	err              error
-	functionRegistry *functions.Registry
+    viewport         viewport.Model
+    messages         []string
+    // storageMessages holds the canonical messages intended for DB persistence.
+    // This is kept in lockstep with the display slice to ensure consistency.
+    storageMessages  []*db.Message
+    commandHistory   []string
+    historyIndex     int
+    textarea         textarea.Model
+    senderStyle      lipgloss.Style
+    wrapStyle        lipgloss.Style
+    err              error
+    functionRegistry *functions.Registry
+    // DB integration fields (non-blocking writes via background worker).
+    dbConn           *db.DB
+    repoManager      db.RepositoryManager
+    conversationID   uuidv7.UUID
+    storageQueue     chan *db.Message
+    callStorageQueue chan *db.CallEvent
 	// Search modal fields
 	showSearchModal  bool
 	searchInput      string
