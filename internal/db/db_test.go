@@ -227,6 +227,11 @@ func setupTestDB(dbPath string) (*DB, error) {
 		return nil, err
 	}
 
+	// Apply schema migrations
+	if err := migrateSchema(dbConn); err != nil {
+		return nil, err
+	}
+
 	return &DB{
 		DB:     dbConn,
 		dbPath: dbPath,

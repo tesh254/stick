@@ -5,6 +5,10 @@ import (
     "encoding/json"
     "errors"
     "fmt"
+    "io"
+    "log"
+    "net/http"
+    "net/url"
     "os"
     "os/exec"
     "path/filepath"
@@ -13,6 +17,8 @@ import (
     "time"
 
     functions "github.com/tesh254/stick/internal/functions"
+    crawl "github.com/tesh254/stick/internal/crawl"
+    "golang.org/x/net/html"
 )
 
 func (ts *Tools) MetadataLabels(name string) map[string]ToolMetadata {
@@ -174,6 +180,33 @@ func (ts *Tools) MetadataLabels(name string) map[string]ToolMetadata {
         Examples: []string{"web_search: {query: \"Go generics examples\", top_k: 5}"},
     }
 
+    // New: websearch tool (structured markdown output)
+    websearchMeta := ToolMetadata{
+        Label:    "Websearch",
+        Info:     "Perform a Google web search and return structured markdown results.",
+        Category: "Web",
+        Params: []ToolParam{
+            {Name: "prompt", Type: "string", Description: "Search query.", Required: true},
+            {Name: "top_k", Type: "number", Description: "Number of top results.", Required: false},
+        },
+        Returns: ToolReturn{Type: "string", Description: "Structured markdown of search results."},
+        Actions: []string{"HTTP GET google search", "scrape and parse HTML", "convert to markdown", "return structured results"},
+        Examples: []string{"websearch: {prompt: \"golang channels\", top_k: 5}"},
+    }
+
+    // New: get_page_content tool
+    getPageContentMeta := ToolMetadata{
+        Label:    "GetPageContent",
+        Info:     "Fetch a URL and return its content in clean markdown.",
+        Category: "Web",
+        Params: []ToolParam{
+            {Name: "url", Type: "string", Description: "HTTP/HTTPS URL to fetch.", Required: true},
+        },
+        Returns: ToolReturn{Type: "string", Description: "Markdown-converted page content."},
+        Actions: []string{"HTTP GET page", "convert HTML to markdown"},
+        Examples: []string{"get_page_content: {url: \"https://example.com\"}"},
+    }
+
     // Function tools
     // CallStdFunc calls a built-in Stick function by name using the functions registry.
     callStdFuncMeta := ToolMetadata{
@@ -205,6 +238,8 @@ func (ts *Tools) MetadataLabels(name string) map[string]ToolMetadata {
         "project_detection": projectDetectionMeta,
         // Web
         "web_search": webSearchMeta,
+        "websearch":   websearchMeta,
+        "get_page_content": getPageContentMeta,
         // Functions
         "call_std_func": callStdFuncMeta,
     }
@@ -356,6 +391,16 @@ type UpsertDirArgs struct {
 type WebSearchArgs struct {
     Query string
     TopK  int
+}
+
+// New tool argument structs
+type WebsearchArgs struct {
+    Prompt string
+    TopK   int
+}
+
+type GetPageContentArgs struct {
+    URL string
 }
 
 type CallStdFuncArgs struct {
@@ -648,6 +693,307 @@ func upsertDir(args UpsertDirArgs) (string, <-chan string) {
     }()
     final := formatToolOutput(toolOutputPayload{Tool: "upsert_dir", Status: "success", Data: "", Metadata: makeMetadata("note", "use channel output")})
     return final, ch
+}
+
+// websearch performs a Google search and returns structured markdown results.
+// Purpose: HTTP GET google search, scrape titles/links, convert HTML to markdown as fallback.
+// Params: WebsearchArgs{Prompt string, TopK int}
+// Channel output: [TOOL_OUTPUT] {tool:"websearch", status, data:"<markdown>", metadata:{query,top_k,endpoint,count}}
+func websearch(args WebsearchArgs) (string, <-chan string) {
+    ch := make(chan string, 1)
+    go func() {
+        defer close(ch)
+        query := strings.TrimSpace(args.Prompt)
+        topK := args.TopK
+        if topK <= 0 {
+            topK = 10
+        } else if topK > 50 {
+            topK = 50
+        }
+
+        if query == "" {
+            meta := makeMetadata("query", query, "top_k", fmt.Sprintf("%d", topK))
+            ch <- formatToolOutput(toolOutputPayload{Tool: "websearch", Status: "error", Data: "prompt cannot be empty", Metadata: meta})
+            return
+        }
+
+        base := getBaseSearchURL()
+        endpoint := fmt.Sprintf("%s?q=%s&num=%d", base, url.QueryEscape(query), topK)
+        // HTTP client with timeout
+        httpClient := &http.Client{Timeout: 15 * time.Second}
+        req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
+        if err != nil {
+            meta := makeMetadata("query", query, "top_k", fmt.Sprintf("%d", topK), "endpoint", endpoint)
+            ch <- formatToolOutput(toolOutputPayload{Tool: "websearch", Status: "error", Data: err.Error(), Metadata: meta})
+            return
+        }
+        req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; StickBot/1.0; +https://github.com/tesh254/stick)")
+        req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+        log.Printf("websearch: GET %s", endpoint)
+
+        resp, err := httpClient.Do(req)
+        if err != nil {
+            meta := makeMetadata("query", query, "top_k", fmt.Sprintf("%d", topK), "endpoint", endpoint)
+            ch <- formatToolOutput(toolOutputPayload{Tool: "websearch", Status: "error", Data: err.Error(), Metadata: meta})
+            return
+        }
+        defer resp.Body.Close()
+        meta := makeMetadata("query", query, "top_k", fmt.Sprintf("%d", topK), "endpoint", endpoint, "status", fmt.Sprintf("%d", resp.StatusCode))
+
+        body, err := io.ReadAll(resp.Body)
+        if err != nil {
+            ch <- formatToolOutput(toolOutputPayload{Tool: "websearch", Status: "error", Data: err.Error(), Metadata: meta})
+            return
+        }
+
+        if resp.StatusCode != http.StatusOK {
+            ch <- formatToolOutput(toolOutputPayload{Tool: "websearch", Status: "error", Data: fmt.Sprintf("http status %d", resp.StatusCode), Metadata: meta})
+            return
+        }
+
+        // Parse results from HTML
+        results := parseSearchResults(body, topK)
+
+        var sb strings.Builder
+        sb.WriteString(fmt.Sprintf("# Google Search Results\n\n"))
+        sb.WriteString(fmt.Sprintf("- Query: %s\n", query))
+        sb.WriteString(fmt.Sprintf("- Top K: %d\n", topK))
+        sb.WriteString(fmt.Sprintf("- Endpoint: %s\n\n", base))
+
+        if len(results) == 0 {
+            // Fallback: convert entire page HTML to markdown
+            md, mdErr := crawl.ToMarkdown(string(body))
+            if mdErr != nil {
+                // If conversion fails, still return raw HTML
+                sb.WriteString("No structured results parsed.\n\n")
+                sb.WriteString("## Raw Page (HTML)\n\n")
+                sb.WriteString("```)\n")
+                sb.WriteString(string(body))
+                sb.WriteString("\n```)\n")
+            } else {
+                sb.WriteString("No structured results parsed.\n\n")
+                sb.WriteString("## Raw Page (Markdown)\n\n")
+                sb.WriteString(md)
+            }
+        } else {
+            for i, r := range results {
+                sb.WriteString(fmt.Sprintf("## %s\n", r.Title))
+                sb.WriteString(fmt.Sprintf("- Link: [%s](%s)\n", r.Link, r.Link))
+                if r.Domain != "" {
+                    sb.WriteString(fmt.Sprintf("- Domain: %s\n", r.Domain))
+                }
+                if strings.TrimSpace(r.Snippet) != "" {
+                    sb.WriteString("\n")
+                    sb.WriteString(r.Snippet)
+                    sb.WriteString("\n")
+                }
+                if i < len(results)-1 {
+                    sb.WriteString("\n")
+                }
+            }
+        }
+
+        out := sb.String()
+        meta["count"] = fmt.Sprintf("%d", len(results))
+        ch <- formatToolOutput(toolOutputPayload{Tool: "websearch", Status: "success", Data: out, Metadata: meta})
+    }()
+    final := formatToolOutput(toolOutputPayload{Tool: "websearch", Status: "success", Data: "", Metadata: makeMetadata("note", "use channel output")})
+    return final, ch
+}
+
+// getPageContent fetches a URL and returns its content converted to markdown.
+// Params: GetPageContentArgs{URL string}
+// Channel output: [TOOL_OUTPUT] {tool:"get_page_content", status, data:"<markdown>", metadata:{url,status,content_length}}
+func getPageContent(args GetPageContentArgs) (string, <-chan string) {
+    ch := make(chan string, 1)
+    go func() {
+        defer close(ch)
+        raw := strings.TrimSpace(args.URL)
+        meta := makeMetadata("url", raw)
+        if raw == "" {
+            ch <- formatToolOutput(toolOutputPayload{Tool: "get_page_content", Status: "error", Data: "url cannot be empty", Metadata: meta})
+            return
+        }
+        u, err := url.Parse(raw)
+        if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+            ch <- formatToolOutput(toolOutputPayload{Tool: "get_page_content", Status: "error", Data: "invalid URL", Metadata: meta})
+            return
+        }
+
+        httpClient := &http.Client{Timeout: 20 * time.Second}
+        req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, raw, nil)
+        if err != nil {
+            ch <- formatToolOutput(toolOutputPayload{Tool: "get_page_content", Status: "error", Data: err.Error(), Metadata: meta})
+            return
+        }
+        req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; StickBot/1.0; +https://github.com/tesh254/stick)")
+        log.Printf("get_page_content: GET %s", raw)
+        resp, err := httpClient.Do(req)
+        if err != nil {
+            ch <- formatToolOutput(toolOutputPayload{Tool: "get_page_content", Status: "error", Data: err.Error(), Metadata: meta})
+            return
+        }
+        defer resp.Body.Close()
+        meta["status"] = fmt.Sprintf("%d", resp.StatusCode)
+        if resp.StatusCode != http.StatusOK {
+            ch <- formatToolOutput(toolOutputPayload{Tool: "get_page_content", Status: "error", Data: fmt.Sprintf("http status %d", resp.StatusCode), Metadata: meta})
+            return
+        }
+
+        b, err := io.ReadAll(resp.Body)
+        if err != nil {
+            ch <- formatToolOutput(toolOutputPayload{Tool: "get_page_content", Status: "error", Data: err.Error(), Metadata: meta})
+            return
+        }
+        meta["content_length"] = fmt.Sprintf("%d", len(b))
+
+        md, err := crawl.ToMarkdown(string(b))
+        if err != nil {
+            ch <- formatToolOutput(toolOutputPayload{Tool: "get_page_content", Status: "error", Data: err.Error(), Metadata: meta})
+            return
+        }
+        ch <- formatToolOutput(toolOutputPayload{Tool: "get_page_content", Status: "success", Data: md, Metadata: meta})
+    }()
+    final := formatToolOutput(toolOutputPayload{Tool: "get_page_content", Status: "success", Data: "", Metadata: makeMetadata("note", "use channel output")})
+    return final, ch
+}
+
+// ---- Search parsing helpers ----
+
+type searchResult struct {
+    Title   string
+    Link    string
+    Snippet string
+    Domain  string
+}
+
+func getBaseSearchURL() string {
+    if base := strings.TrimSpace(os.Getenv("STICK_SEARCH_BASE_URL")); base != "" {
+        return base
+    }
+    return "https://www.google.com/search"
+}
+
+// parseSearchResults attempts to extract reasonable results from HTML.
+// It is resilient and falls back to anchor text when structured tags are absent.
+func parseSearchResults(htmlBytes []byte, topK int) []searchResult {
+    // Parse with x/net/html
+    doc, err := html.Parse(strings.NewReader(string(htmlBytes)))
+    if err != nil {
+        log.Printf("websearch: html parse error: %v", err)
+        return nil
+    }
+    results := make([]searchResult, 0, topK)
+    seen := map[string]bool{}
+    var walk func(*html.Node)
+    walk = func(n *html.Node) {
+        if n == nil || len(results) >= topK {
+            return
+        }
+        if n.Type == html.ElementNode && strings.EqualFold(n.Data, "a") {
+            href := attr(n, "href")
+            if href != "" {
+                link := extractRealLink(href)
+                if link == "" || seen[link] {
+                    // skip
+                } else {
+                    title := strings.TrimSpace(textContent(n))
+                    if title == "" {
+                        if h3 := findChild(n, "h3"); h3 != nil {
+                            title = strings.TrimSpace(textContent(h3))
+                        }
+                    }
+                    if title != "" && isLikelyExternal(link) {
+                        sr := searchResult{Title: title, Link: link, Domain: domainFromURL(link)}
+                        // Try snippet from parent
+                        if p := n.Parent; p != nil {
+                            snippet := strings.TrimSpace(textContent(p))
+                            if snippet != sr.Title && snippet != "" {
+                                if len(snippet) > 300 { snippet = snippet[:300] + "…" }
+                                sr.Snippet = snippet
+                            }
+                        }
+                        results = append(results, sr)
+                        seen[link] = true
+                    }
+                }
+            }
+        }
+        for c := n.FirstChild; c != nil && len(results) < topK; c = c.NextSibling {
+            walk(c)
+        }
+    }
+    walk(doc)
+    return results
+}
+
+func attr(n *html.Node, key string) string {
+    for _, a := range n.Attr {
+        if a.Key == key { return a.Val }
+    }
+    return ""
+}
+
+func findChild(n *html.Node, tag string) *html.Node {
+    for c := n.FirstChild; c != nil; c = c.NextSibling {
+        if c.Type == html.ElementNode && strings.EqualFold(c.Data, tag) {
+            return c
+        }
+    }
+    return nil
+}
+
+func textContent(n *html.Node) string {
+    var b strings.Builder
+    var walk func(*html.Node)
+    walk = func(x *html.Node) {
+        if x == nil { return }
+        if x.Type == html.ElementNode && (x.Data == "script" || x.Data == "style") { return }
+        if x.Type == html.TextNode {
+            t := strings.TrimSpace(x.Data)
+            if t != "" {
+                b.WriteString(t)
+                b.WriteString(" ")
+            }
+        }
+        for c := x.FirstChild; c != nil; c = c.NextSibling {
+            walk(c)
+        }
+    }
+    walk(n)
+    return strings.TrimSpace(b.String())
+}
+
+func extractRealLink(href string) string {
+    // Handle Google redirect links like /url?q=<real>&...
+    if strings.HasPrefix(href, "/url?") || strings.Contains(href, "google.com/url?") {
+        u, err := url.Parse(href)
+        if err == nil {
+            q := u.Query().Get("q")
+            if q != "" {
+                return q
+            }
+        }
+        // best effort fallback
+    }
+    if strings.HasPrefix(href, "/") {
+        return ""
+    }
+    return href
+}
+
+func isLikelyExternal(link string) bool {
+    u, err := url.Parse(link)
+    if err != nil { return false }
+    if u.Scheme != "http" && u.Scheme != "https" { return false }
+    if strings.Contains(u.Host, "google.") { return false }
+    return true
+}
+
+func domainFromURL(link string) string {
+    u, err := url.Parse(link)
+    if err != nil { return "" }
+    return u.Host
 }
 
 // webSearch is a stub for pre-integration; it emits an error indicating not implemented.
