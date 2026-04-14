@@ -106,3 +106,15 @@ type CallEvent struct {
     CompletedAt     time.Time    `json:"completed_at"`
     DurationMS      int64        `json:"duration_ms"`
 }
+
+// ProviderSettings stores configuration for an AI provider
+type ProviderSettings struct {
+	ProviderName string    `json:"provider_name"`
+	APIKey       string    `json:"api_key"`
+	Model        string    `json:"model"`
+	Endpoint     string    `json:"endpoint"`
+	ExtraParams  string    `json:"extra_params"` // JSON string
+	IsDefault    bool      `json:"is_default"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}

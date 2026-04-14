@@ -146,6 +146,10 @@ type Client struct {
 	HTTPClient *http.Client
 	// BaseURL allows overriding the default OpenRouter endpoint, useful for tests.
 	BaseURL string
+	// Provider specifies the AI provider to use (e.g., "openai", "anthropic")
+	Provider string
+	// Model specifies the model to use (e.g., "gpt-4", "claude-3")
+	Model string
 	// OnStreamText, if set, is called with text deltas as they arrive.
 	OnStreamText func(chunk string)
 	// OnStreamToolCallDelta, if set, is called for tool call delta messages.

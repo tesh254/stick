@@ -1,15 +1,17 @@
 package tui
 
 import (
-    "context"
-    "fmt"
-    "strings"
+	"context"
+	"fmt"
+	"os"
+	"strings"
 
-    tea "github.com/charmbracelet/bubbletea"
-    "github.com/charmbracelet/lipgloss"
-    "github.com/tesh254/stick/internal/functions"
-    "github.com/tesh254/stick/internal/utils"
-    "github.com/tesh254/stick/internal/db"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/tesh254/stick/internal/db"
+	"github.com/tesh254/stick/internal/functions"
+	"github.com/tesh254/stick/internal/provider"
+	"github.com/tesh254/stick/internal/utils"
 )
 
 const gap = "\n\n"
@@ -18,6 +20,18 @@ type errMsg error
 
 // submitMsg is a message to trigger message submission
 type submitMsg struct{}
+
+type agentResponseMsg struct {
+	Content   string
+	ToolCalls []provider.ToolCall
+}
+
+type toolOutputMsg struct {
+	ToolCallID string
+	Output     string
+	ToolCalls  []provider.ToolCall
+	Content    string
+}
 
 // handleWindowSizeMsg adjusts the layout when the terminal window is resized
 func (m *model) handleWindowSizeMsg(v tea.WindowSizeMsg) {
@@ -56,6 +70,11 @@ func (m *model) handleWindowSizeMsg(v tea.WindowSizeMsg) {
 
 // handleKeyMsg processes keyboard inputs
 func (m *model) handleKeyMsg(v tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle file modal keys if modal is open
+	if m.showFileModal {
+		return m.handleFileModalKeys(v)
+	}
+
 	// Handle search modal keys if modal is open
 	if m.showSearchModal {
 		return m.handleSearchModalKeys(v)
@@ -116,7 +135,8 @@ func (m *model) handleKeyMsg(v tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// The message will be submitted in the next update cycle
 		}
 		// Handle enter normally (submit message)
-		m.handleEnterKey()
+		cmd := m.handleEnterKey()
+		return *m, cmd
 	case tea.KeyUp:
 		// Only navigate command history if viewport is not focused
 		if !m.viewportFocused {
@@ -197,105 +217,150 @@ func (m *model) handleDownArrow() {
 }
 
 // handleEnterKey processes the Enter key press in the textarea
-func (m *model) handleEnterKey() {
-    input := m.textarea.Value()
-    if input != "" {
-        username := utils.GetUser()
-        prefix := m.senderStyle.Render("{" + username + "}: ")
+func (m *model) handleEnterKey() tea.Cmd {
+	input := m.textarea.Value()
+	var cmd tea.Cmd
+
+	if input != "" {
+		username := utils.GetUser()
+		prefix := m.senderStyle.Render("{" + username + "}: ")
 
 		// Check if input is a slash command first
-        // Always display and store the user's input
-        m.messages = append(m.messages, prefix+input)
-        var parentMsg *db.Message
-        if m.repoManager != nil {
-            userMsg := m.buildStorageMessage(db.User, input)
-            parentMsg = userMsg
-            m.storageMessages = append(m.storageMessages, userMsg)
-            m.enqueueStorageMessage(userMsg)
-        }
+		// Always display and store the user's input
+		m.messages = append(m.messages, prefix+input)
+		var parentMsg *db.Message
+		if m.repoManager != nil {
+			userMsg := m.buildStorageMessage(db.User, input)
+			parentMsg = userMsg
+			m.storageMessages = append(m.storageMessages, userMsg)
+			m.enqueueStorageMessage(userMsg)
+		}
 
-        if strings.HasPrefix(input, "/") {
-            response := m.processSlashCommand(input)
-            if response != "" {
-                m.messages = append(m.messages, response)
-                if m.repoManager != nil {
-                    asstMsg := m.buildStorageMessage(db.Assistant, response)
-                    // Link assistant response to triggering user message
-                    if parentMsg != nil {
-                        pmid := parentMsg.ID
-                        asstMsg.ParentMessage = &pmid
-                    }
-                    m.storageMessages = append(m.storageMessages, asstMsg)
-                    m.enqueueStorageMessage(asstMsg)
-                }
-            }
-        } else {
-            // Attempt function call pipeline to get both display and raw storage content
-            if res, ok := m.processFunctionCallPipeline(input); ok {
-                if res.IsError {
-                    if res.Display != "" {
-                        m.messages = append(m.messages, res.Display)
-                    } else {
-                        m.messages = append(m.messages, "Error: "+res.Err.Error())
-                    }
-                    // Store assistant error message
-                    if m.repoManager != nil {
-                        content := res.RawResult
-                        if content == "" && res.Err != nil {
-                            content = res.Err.Error()
-                        }
-                        asstMsg := m.buildStorageMessage(db.Assistant, content)
-                        // Link assistant result to triggering user message
-                        if parentMsg != nil {
-                            pmid := parentMsg.ID
-                            asstMsg.ParentMessage = &pmid
-                        }
-                        m.storageMessages = append(m.storageMessages, asstMsg)
-                        m.enqueueStorageMessage(asstMsg)
-                        // Persist call event metadata linked to the user's message
-                        if parentMsg != nil && res.FunctionName != "" {
-                            ev := m.buildCallEvent(parentMsg, res.FunctionName, res.Arguments, res)
-                            m.enqueueCallEvent(ev)
-                        }
-                    }
-                } else {
-                    m.messages = append(m.messages, res.Display)
-                    // Store assistant success message (raw result)
-                    if m.repoManager != nil {
-                        asstMsg := m.buildStorageMessage(db.Assistant, res.RawResult)
-                        // Link assistant result to triggering user message
-                        if parentMsg != nil {
-                            pmid := parentMsg.ID
-                            asstMsg.ParentMessage = &pmid
-                        }
-                        m.storageMessages = append(m.storageMessages, asstMsg)
-                        m.enqueueStorageMessage(asstMsg)
-                        // Persist call event metadata linked to the user's message
-                        if parentMsg != nil && res.FunctionName != "" {
-                            ev := m.buildCallEvent(parentMsg, res.FunctionName, res.Arguments, res)
-                            m.enqueueCallEvent(ev)
-                        }
-                    }
-                }
-            }
-        }
+		if strings.HasPrefix(input, "/") {
+			response := m.processSlashCommand(input)
+			if response != "" {
+				m.messages = append(m.messages, response)
+				if m.repoManager != nil {
+					asstMsg := m.buildStorageMessage(db.Assistant, response)
+					// Link assistant response to triggering user message
+					if parentMsg != nil {
+						pmid := parentMsg.ID
+						asstMsg.ParentMessage = &pmid
+					}
+					m.storageMessages = append(m.storageMessages, asstMsg)
+					m.enqueueStorageMessage(asstMsg)
+				}
+			}
+		} else {
+			// Attempt function call pipeline to get both display and raw storage content
+			if res, ok := m.processFunctionCallPipeline(input); ok {
+				if res.IsError {
+					if res.Display != "" {
+						m.messages = append(m.messages, res.Display)
+					} else {
+						m.messages = append(m.messages, "Error: "+res.Err.Error())
+					}
+					// Store assistant error message
+					if m.repoManager != nil {
+						content := res.RawResult
+						if content == "" && res.Err != nil {
+							content = res.Err.Error()
+						}
+						asstMsg := m.buildStorageMessage(db.Assistant, content)
+						// Link assistant result to triggering user message
+						if parentMsg != nil {
+							pmid := parentMsg.ID
+							asstMsg.ParentMessage = &pmid
+						}
+						m.storageMessages = append(m.storageMessages, asstMsg)
+						m.enqueueStorageMessage(asstMsg)
+						// Persist call event metadata linked to the user's message
+						if parentMsg != nil && res.FunctionName != "" {
+							ev := m.buildCallEvent(parentMsg, res.FunctionName, res.Arguments, res)
+							m.enqueueCallEvent(ev)
+						}
+					}
+				} else {
+					m.messages = append(m.messages, res.Display)
+					// Store assistant success message (raw result)
+					if m.repoManager != nil {
+						asstMsg := m.buildStorageMessage(db.Assistant, res.RawResult)
+						// Link assistant result to triggering user message
+						if parentMsg != nil {
+							pmid := parentMsg.ID
+							asstMsg.ParentMessage = &pmid
+						}
+						m.storageMessages = append(m.storageMessages, asstMsg)
+						m.enqueueStorageMessage(asstMsg)
+						// Persist call event metadata linked to the user's message
+						if parentMsg != nil && res.FunctionName != "" {
+							ev := m.buildCallEvent(parentMsg, res.FunctionName, res.Arguments, res)
+							m.enqueueCallEvent(ev)
+						}
+					}
+				}
+			} else {
+				// Regular chat message - send to agent
+
+				// Check for file context injection via @filename
+				expandedInput := input
+				words := strings.Fields(input)
+				var contextBuilder strings.Builder
+				contextBuilder.WriteString(input)
+
+				foundFiles := false
+				for _, word := range words {
+					if strings.HasPrefix(word, "@") {
+						fname := strings.TrimPrefix(word, "@")
+						// Check if file exists
+						if _, err := os.Stat(fname); err == nil {
+							content, err := os.ReadFile(fname)
+							if err == nil {
+								foundFiles = true
+								contextBuilder.WriteString(fmt.Sprintf("\n\n--- Context from file: %s ---\n%s\n---------------------------", fname, string(content)))
+							}
+						}
+					}
+				}
+
+				if foundFiles {
+					expandedInput = contextBuilder.String()
+				}
+
+				m.isLoading = true
+				utils.LogDebug("Sending request to agent: %s", expandedInput)
+				cmd = tea.Batch(
+					func() tea.Msg {
+						content, toolCalls, err := m.agentSession.Chat(context.Background(), expandedInput)
+						if err != nil {
+							utils.LogDebug("Agent error: %v", err)
+							return errMsg(err)
+						}
+						utils.LogDebug("Agent response received: Content len=%d, ToolCalls=%d", len(content), len(toolCalls))
+						return agentResponseMsg{Content: content, ToolCalls: toolCalls}
+					},
+					m.spinner.Tick,
+				)
+			}
+		}
 
 		// Add the input to command history
 		m.commandHistory = append(m.commandHistory, input)
 		m.historyIndex = -1 // Reset history index to current (empty) state
 
-        m.viewport.SetContent(m.wrapStyle.Render(formatMessages(m.messages)))
-        m.textarea.Reset()
-        m.viewport.GotoBottom()
+		m.viewport.SetContent(m.wrapStyle.Render(formatMessages(m.messages)))
+		m.textarea.Reset()
+		m.viewport.GotoBottom()
 
-        // Exit slash mode after command is executed
-        if m.isInSlashMode {
-            m.endSlashMode()
-        }
+		// Exit slash mode after command is executed
+		if m.isInSlashMode {
+			m.endSlashMode()
+		}
 
-        // Lightweight consistency validation (non-blocking)
-        _ = m.validateConsistency()
-    }
+		// Lightweight consistency validation (non-blocking)
+		_ = m.validateConsistency()
+	}
+	return cmd
 }
 
 // processFunctionCall processes function calls in the input string
@@ -335,29 +400,37 @@ func (m *model) processFunctionCall(input string) (string, error) {
 	}
 
 	// If a function call was recognized
-    if parsed.HasFunction && parsed.FunctionName != "" {
-        // Enforce case-sensitive function name detection in the TUI layer
-        funcs := m.functionRegistry.GetFunctions()
-        if _, exists := funcs[parsed.FunctionName]; !exists {
-            // Maintain current error reporting for truly unknown functions in proper call syntax
-            fr := NewFunctionRenderer()
-            styled := fr.renderFunctionOrToolResult(parsed.FunctionName, strings.Join(parsed.Arguments, ", "), "", true)
-            return styled, fmt.Errorf("unknown function: %s", parsed.FunctionName)
-        }
+	if parsed.HasFunction && parsed.FunctionName != "" {
+		// Enforce case-sensitive function name detection in the TUI layer
+		funcs := m.functionRegistry.GetFunctions()
+		if _, exists := funcs[parsed.FunctionName]; !exists {
+			// Maintain current error reporting for truly unknown functions in proper call syntax
+			fr := NewFunctionRenderer()
+			styled := fr.renderFunctionOrToolResult(parsed.FunctionName, strings.Join(parsed.Arguments, ", "), "", true)
+			return styled, fmt.Errorf("unknown function: %s", parsed.FunctionName)
+		}
 
-        // Valid function call; support empty and parameterized calls
-        fr := NewFunctionRenderer()
-        // Optionally show the function name block then the result block
-        nameBlock := fr.RenderFunctionName(parsed.FunctionName, parsed.Arguments)
-        resultBlock, err := fr.ExecuteAndRender(m.functionRegistry, parsed.FunctionName, parsed.Arguments, &CallOptions{CaseSensitive: true})
-        if err != nil {
-            // Combine name and error block
-            combined := lipgloss.JoinVertical(lipgloss.Left, nameBlock, resultBlock)
-            return combined, err
-        }
-        combined := lipgloss.JoinVertical(lipgloss.Left, nameBlock, resultBlock)
-        return combined, nil
-    }
+		// Valid function call; support empty and parameterized calls
+		fr := NewFunctionRenderer()
+		// Optionally show the function name block then the result block
+		nameBlock := fr.RenderFunctionName(parsed.FunctionName, parsed.Arguments)
+		resultBlock, err := fr.ExecuteAndRender(m.functionRegistry, parsed.FunctionName, parsed.Arguments, &CallOptions{CaseSensitive: true})
+		if err != nil {
+			// Combine name and error block
+			combined := lipgloss.JoinVertical(lipgloss.Left, nameBlock, resultBlock)
+			return combined, err
+		}
+		
+		// Reload agent session if set_provider was called successfully
+		if parsed.FunctionName == "set_provider" {
+			m.agentSession = agent.NewSession()
+			// Optionally append a confirmation message to the result block
+			resultBlock = lipgloss.JoinVertical(lipgloss.Left, resultBlock, lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("Agent session reloaded."))
+		}
+
+		combined := lipgloss.JoinVertical(lipgloss.Left, nameBlock, resultBlock)
+		return combined, nil
+	}
 
 	// Not a function call -> treat as regular text
 	return "", nil
@@ -365,42 +438,42 @@ func (m *model) processFunctionCall(input string) (string, error) {
 
 // processSlashCommand processes slash commands like /functions and /help_{function}
 func (m *model) processSlashCommand(input string) string {
-    input = strings.TrimSpace(input)
+	input = strings.TrimSpace(input)
 
-    // Handle /functions command
-    if input == "/functions" {
-        return m.listFunctions()
-    }
+	// Handle /functions command
+	if input == "/functions" {
+		return m.listFunctions()
+	}
 
-    // Reload and reconstruct current conversation from DB
-    if input == "/reload" {
-        if m.repoManager == nil {
-            return "Persistence not configured; nothing to reload."
-        }
-        if err := m.LoadConversationFromDB(m.conversationID); err != nil {
-            return fmt.Sprintf("Reload failed: %v", err)
-        }
-        return "Conversation reloaded from storage."
-    }
+	// Reload and reconstruct current conversation from DB
+	if input == "/reload" {
+		if m.repoManager == nil {
+			return "Persistence not configured; nothing to reload."
+		}
+		if err := m.LoadConversationFromDB(m.conversationID); err != nil {
+			return fmt.Sprintf("Reload failed: %v", err)
+		}
+		return "Conversation reloaded from storage."
+	}
 
-    // Replay the most recent recorded function/tool call
-    if input == "/replay_last" {
-        if m.repoManager == nil {
-            return "Persistence not configured; cannot replay."
-        }
-        ctx := context.Background()
-        calls, err := m.repoManager.Calls().GetByConversationID(ctx, m.conversationID)
-        if err != nil || len(calls) == 0 {
-            return "No calls recorded to replay."
-        }
-        ev := calls[len(calls)-1]
-        name, rendered, _ := m.ReplayCallFromEvent(ev)
-        m.messages = append(m.messages, name)
-        m.messages = append(m.messages, rendered)
-        m.viewport.SetContent(m.wrapStyle.Render(formatMessages(m.messages)))
-        m.viewport.GotoBottom()
-        return "Replayed last call from storage."
-    }
+	// Replay the most recent recorded function/tool call
+	if input == "/replay_last" {
+		if m.repoManager == nil {
+			return "Persistence not configured; cannot replay."
+		}
+		ctx := context.Background()
+		calls, err := m.repoManager.Calls().GetByConversationID(ctx, m.conversationID)
+		if err != nil || len(calls) == 0 {
+			return "No calls recorded to replay."
+		}
+		ev := calls[len(calls)-1]
+		name, rendered, _ := m.ReplayCallFromEvent(ev)
+		m.messages = append(m.messages, name)
+		m.messages = append(m.messages, rendered)
+		m.viewport.SetContent(m.wrapStyle.Render(formatMessages(m.messages)))
+		m.viewport.GotoBottom()
+		return "Replayed last call from storage."
+	}
 
 	// Handle /help_{function} command
 	if strings.HasPrefix(input, "/help_") {
@@ -408,8 +481,8 @@ func (m *model) processSlashCommand(input string) string {
 		return m.getFunctionHelp(functionName)
 	}
 
-    // Unknown slash command
-    return fmt.Sprintf("Unknown command: %s. Available commands: /functions, /help_{function}, /reload, /replay_last", input)
+	// Unknown slash command
+	return fmt.Sprintf("Unknown command: %s. Available commands: /functions, /help_{function}, /reload, /replay_last", input)
 }
 
 // listFunctions returns a list of all registered functions
@@ -586,13 +659,13 @@ func (m *model) adjustViewportForModal() {
 
 // populateSlashCommands populates the list of available slash commands
 func (m *model) populateSlashCommands() {
-    // Define the available slash commands
-    slashCommands := []string{
-        "/functions",
-        "/help_",
-        "/reload",
-        "/replay_last",
-    }
+	// Define the available slash commands
+	slashCommands := []string{
+		"/functions",
+		"/help_",
+		"/reload",
+		"/replay_last",
+	}
 
 	// Add help commands for each registered function
 	if m.functionRegistry != nil {
@@ -633,11 +706,146 @@ func (m *model) updateFilteredCommands() {
 		}
 	}
 
-	// Combine results with exact start matches first
-	filtered = append(filtered, exactStartMatches...)
-	filtered = append(filtered, containsMatches...)
-
+	filtered = append(exactStartMatches, containsMatches...)
 	m.filteredCommands = filtered
+	m.selectedIndex = 0 // Reset selection when filter changes
+}
+
+// toggleFileModal toggles the file search modal visibility and initializes it
+func (m *model) toggleFileModal() {
+	if m.isInAtMode {
+		m.endFileMode()
+	} else {
+		m.startFileMode()
+	}
+}
+
+// startFileMode starts the file search mode with modal
+func (m *model) startFileMode() {
+	m.isInAtMode = true
+	m.showFileModal = true
+	m.fileSearchInput = "" // Start with empty search, as user just typed @
+	m.fileSelectedIndex = 0
+	m.populateFiles()
+	m.updateFilteredFiles()
+	m.adjustViewportForModal()
+}
+
+// endFileMode ends the file search mode and closes the modal
+func (m *model) endFileMode() {
+	m.isInAtMode = false
+	m.showFileModal = false
+	m.fileSearchInput = ""
+	m.filteredFiles = []string{}
+	m.fileSelectedIndex = 0
+	m.adjustViewportForModal()
+}
+
+// populateFiles populates the list of available files
+func (m *model) populateFiles() {
+	wd, _ := os.Getwd()
+	files, err := utils.ListFiles(wd)
+	if err != nil {
+		// Handle error gracefully?
+		m.allFiles = []string{}
+		return
+	}
+	m.allFiles = files
+	m.filteredFiles = files
+}
+
+// updateFilteredFiles updates the list of filtered files based on search input
+func (m *model) updateFilteredFiles() {
+	if m.fileSearchInput == "" {
+		m.filteredFiles = m.allFiles
+		return
+	}
+
+	var filtered []string
+	search := strings.ToLower(m.fileSearchInput)
+
+	var exactStartMatches []string
+	var containsMatches []string
+
+	for _, f := range m.allFiles {
+		fLower := strings.ToLower(f)
+		if strings.HasPrefix(fLower, search) {
+			exactStartMatches = append(exactStartMatches, f)
+		} else if strings.Contains(fLower, search) {
+			containsMatches = append(containsMatches, f)
+		}
+	}
+
+	filtered = append(exactStartMatches, containsMatches...)
+	m.filteredFiles = filtered
+	m.fileSelectedIndex = 0
+}
+
+// handleFileModalKeys handles keyboard input when the file modal is active
+func (m *model) handleFileModalKeys(v tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch v.Type {
+	case tea.KeyEscape:
+		m.endFileMode()
+		return *m, nil
+	case tea.KeyCtrlC:
+		m.endFileMode()
+		fmt.Println(m.textarea.Value())
+		return *m, tea.Quit
+	case tea.KeyEnter:
+		if len(m.filteredFiles) > 0 && m.fileSelectedIndex < len(m.filteredFiles) {
+			selectedFile := m.filteredFiles[m.fileSelectedIndex]
+
+			// Replace the current word (starting with @) with the selected file
+			val := m.textarea.Value()
+
+			// Find the last @
+			atIndex := strings.LastIndex(val, "@")
+			if atIndex != -1 {
+				// We replace from atIndex to the end (assuming we are at the end)
+				// Or we should be careful if cursor is not at end?
+				// For simplicity, assume we are typing at the end or the @ being edited is the last one.
+				// But wait, m.fileSearchInput is updated in Update.
+
+				prefix := val[:atIndex]
+				m.textarea.SetValue(prefix + "@" + selectedFile + " ")
+				m.textarea.SetCursor(len(m.textarea.Value()))
+			}
+
+			m.endFileMode()
+			return *m, nil
+		} else {
+			m.endFileMode()
+			return *m, nil
+		}
+	case tea.KeyUp:
+		if len(m.filteredFiles) > 0 {
+			m.fileSelectedIndex--
+			if m.fileSelectedIndex < 0 {
+				m.fileSelectedIndex = len(m.filteredFiles) - 1
+			}
+		}
+	case tea.KeyDown:
+		if len(m.filteredFiles) > 0 {
+			m.fileSelectedIndex++
+			if m.fileSelectedIndex >= len(m.filteredFiles) {
+				m.fileSelectedIndex = 0
+			}
+		}
+	case tea.KeyTab:
+		if len(m.filteredFiles) > 0 && m.fileSelectedIndex < len(m.filteredFiles) {
+			selectedFile := m.filteredFiles[m.fileSelectedIndex]
+			val := m.textarea.Value()
+			atIndex := strings.LastIndex(val, "@")
+			if atIndex != -1 {
+				prefix := val[:atIndex]
+				m.textarea.SetValue(prefix + "@" + selectedFile + " ")
+				m.textarea.SetCursor(len(m.textarea.Value()))
+			}
+		}
+		return *m, nil
+	}
+
+	return *m, nil
 }
 
 // formatMessages joins messages with newlines for display in the viewport

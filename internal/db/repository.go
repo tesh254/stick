@@ -41,13 +41,16 @@ type UsageRepository interface {
 
 // RepositoryManager provides access to all repositories
 type RepositoryManager interface {
-    Conversations() ConversationRepository
-    Messages() MessageRepository
-    Usage() UsageRepository
-    Calls() CallRepository
-    BeginTx(ctx context.Context) (RepositoryManager, error)
-    Commit() error
-    Rollback() error
+	Conversations() ConversationRepository
+	Messages() MessageRepository
+	Usage() UsageRepository
+	Calls() CallRepository
+	BeginTx(ctx context.Context) (RepositoryManager, error)
+	Commit() error
+	Rollback() error
+	SaveProviderSettings(ctx context.Context, settings *ProviderSettings) error
+	LoadProviderSettings(ctx context.Context, providerName string) (*ProviderSettings, error)
+	SetDefaultProvider(ctx context.Context, providerName string) error
 }
 
 // repositoryManager implements RepositoryManager
@@ -115,4 +118,16 @@ func (rm *repositoryManager) Rollback() error {
 		return rm.tx.Rollback()
 	}
 	return nil
+}
+
+func (rm *repositoryManager) SaveProviderSettings(ctx context.Context, settings *ProviderSettings) error {
+	return rm.db.SaveProviderSettings(ctx, settings)
+}
+
+func (rm *repositoryManager) LoadProviderSettings(ctx context.Context, providerName string) (*ProviderSettings, error) {
+	return rm.db.LoadProviderSettings(ctx, providerName)
+}
+
+func (rm *repositoryManager) SetDefaultProvider(ctx context.Context, providerName string) error {
+	return rm.db.SetDefaultProvider(ctx, providerName)
 }

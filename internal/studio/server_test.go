@@ -16,10 +16,17 @@ import (
 
 type mockRepoManager struct{}
 
-func (m *mockRepoManager) Conversations() db.ConversationRepository                { return &mockConvRepo{} }
-func (m *mockRepoManager) Messages() db.MessageRepository                          { return &mockMsgRepo{} }
-func (m *mockRepoManager) Usage() db.UsageRepository                               { return &mockUsageRepo{} }
-func (m *mockRepoManager) Calls() db.CallRepository                                { return &mockCallRepo{} }
+func (m *mockRepoManager) Conversations() db.ConversationRepository { return &mockConvRepo{} }
+func (m *mockRepoManager) Messages() db.MessageRepository           { return &mockMsgRepo{} }
+func (m *mockRepoManager) Usage() db.UsageRepository                { return &mockUsageRepo{} }
+func (m *mockRepoManager) Calls() db.CallRepository                 { return &mockCallRepo{} }
+func (m *mockRepoManager) LoadProviderSettings(_ context.Context, _ string) (*db.ProviderSettings, error) {
+	return nil, nil
+}
+func (m *mockRepoManager) SaveProviderSettings(_ context.Context, _ *db.ProviderSettings) error {
+	return nil
+}
+func (m *mockRepoManager) SetDefaultProvider(_ context.Context, _ string) error    { return nil }
 func (m *mockRepoManager) BeginTx(_ context.Context) (db.RepositoryManager, error) { return m, nil }
 func (m *mockRepoManager) Commit() error                                           { return nil }
 func (m *mockRepoManager) Rollback() error                                         { return nil }
@@ -28,14 +35,14 @@ type mockConvRepo struct{}
 
 func (r *mockConvRepo) Create(_ context.Context, _ *db.Conversation) error { return nil }
 func (r *mockConvRepo) GetByID(_ context.Context, id uuidv7.UUID) (*db.Conversation, error) {
-    return &db.Conversation{ID: id, Title: "Test", WorkingDirectory: "/tmp", CreatedAt: time.Now()}, nil
+	return &db.Conversation{ID: id, Title: "Test", WorkingDirectory: "/tmp", CreatedAt: time.Now()}, nil
 }
 func (r *mockConvRepo) GetAll(_ context.Context, limit, offset int) ([]*db.Conversation, error) {
-    uid, err := uuidv7.New()
-    if err != nil {
-        uid = uuidv7.UUID{}
-    }
-    return []*db.Conversation{{ID: uid, Title: "A", WorkingDirectory: "/tmp", CreatedAt: time.Now()}}, nil
+	uid, err := uuidv7.New()
+	if err != nil {
+		uid = uuidv7.UUID{}
+	}
+	return []*db.Conversation{{ID: uid, Title: "A", WorkingDirectory: "/tmp", CreatedAt: time.Now()}}, nil
 }
 func (r *mockConvRepo) Update(_ context.Context, _ uuidv7.UUID, _ string) error { return nil }
 func (r *mockConvRepo) Delete(_ context.Context, _ uuidv7.UUID) error           { return nil }

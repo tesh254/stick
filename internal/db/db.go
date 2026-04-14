@@ -1,6 +1,7 @@
 package db
 
 import (
+    "context"
     "database/sql"
     "fmt"
     "os"
@@ -127,6 +128,24 @@ func createTables(db *sql.DB) error {
         return fmt.Errorf("failed to create calls table: %w", err)
     }
 
+    // Create settings table for AI provider configurations
+    _, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider_name TEXT NOT NULL UNIQUE,
+            api_key TEXT NOT NULL,
+            model TEXT NOT NULL,
+            endpoint TEXT NOT NULL,
+            extra_params TEXT,  -- JSON for additional parameters
+            is_default BOOLEAN DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `)
+    if err != nil {
+        return fmt.Errorf("failed to create settings table: %w", err)
+    }
+
     return nil
 }
 
@@ -147,6 +166,84 @@ func migrateSchema(db *sql.DB) error {
     _, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_messages_conv_seq ON messages (conversation_id, seq)`)
     _, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_calls_conv_started ON calls (conversation_id, started_at)`)
     return nil
+}
+
+// SaveProviderSettings saves or updates the settings for a provider
+func (d *DB) SaveProviderSettings(ctx context.Context, settings *ProviderSettings) error {
+	stmt, err := d.PrepareContext(ctx, `
+		INSERT OR REPLACE INTO settings (provider_name, api_key, model, endpoint, extra_params, is_default, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare save settings statement: %w", err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.ExecContext(ctx, settings.ProviderName, settings.APIKey, settings.Model, settings.Endpoint, settings.ExtraParams, settings.IsDefault, settings.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to save settings: %w", err)
+	}
+	return nil
+}
+
+// LoadProviderSettings loads the settings for a specific provider
+func (d *DB) LoadProviderSettings(ctx context.Context, providerName string) (*ProviderSettings, error) {
+	row := d.QueryRowContext(ctx, `
+		SELECT provider_name, api_key, model, endpoint, extra_params, is_default, created_at, updated_at
+		FROM settings
+		WHERE provider_name = ?
+	`, providerName)
+
+	settings := &ProviderSettings{}
+	err := row.Scan(&settings.ProviderName, &settings.APIKey, &settings.Model, &settings.Endpoint, &settings.ExtraParams, &settings.IsDefault, &settings.CreatedAt, &settings.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // No settings found
+		}
+		return nil, fmt.Errorf("failed to load settings: %w", err)
+	}
+	return settings, nil
+}
+
+// GetDefaultProvider returns the name of the default provider
+func (d *DB) GetDefaultProvider(ctx context.Context) (string, error) {
+	var providerName string
+	err := d.QueryRowContext(ctx, `
+		SELECT provider_name
+		FROM settings
+		WHERE is_default = 1
+		LIMIT 1
+	`).Scan(&providerName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil // No default set
+		}
+		return "", fmt.Errorf("failed to get default provider: %w", err)
+	}
+	return providerName, nil
+}
+
+// SetDefaultProvider sets a provider as default and unsets others
+func (d *DB) SetDefaultProvider(ctx context.Context, providerName string) error {
+	tx, err := d.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Unset all defaults
+	_, err = tx.ExecContext(ctx, `UPDATE settings SET is_default = 0`)
+	if err != nil {
+		return fmt.Errorf("failed to unset defaults: %w", err)
+	}
+
+	// Set the new default
+	_, err = tx.ExecContext(ctx, `UPDATE settings SET is_default = 1 WHERE provider_name = ?`, providerName)
+	if err != nil {
+		return fmt.Errorf("failed to set default: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 // Close closes the database connection

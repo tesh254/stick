@@ -6,8 +6,43 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spf13/viper"
 	"github.com/tesh254/stick/internal/crawl"
 )
+
+// SetProvider: args ["platform", "model", "api_key"] -> sets the provider configuration
+func SetProvider(args []string) (string, error) {
+	if len(args) < 3 {
+		return "", errors.New("requires 3 arguments: platform, model, api_key")
+	}
+
+	platform := strings.TrimSpace(unquoteIfQuoted(args[0]))
+	model := strings.TrimSpace(unquoteIfQuoted(args[1]))
+	apiKey := strings.TrimSpace(unquoteIfQuoted(args[2]))
+
+	// Update viper config
+	viper.Set(fmt.Sprintf("providers.%s.apikey", platform), apiKey)
+	viper.Set(fmt.Sprintf("providers.%s.model", platform), model)
+	
+	// Also set as current provider if desired, or just set the specific provider settings.
+	// The user asked to "set a new custom provider", implying they want to use it.
+	// So we should probably set `ai.platform` or `provider` to this platform.
+	viper.Set("ai.platform", platform)
+	// We might also want to set global model/apikey as fallback, but provider-specific is better.
+	
+	// Save config
+	err := viper.WriteConfig()
+	if err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			err = viper.SafeWriteConfig()
+		}
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to save config: %w", err)
+	}
+
+	return fmt.Sprintf("Provider configured: %s (model: %s). Configuration saved.", platform, model), nil
+}
 
 // Add: args ["1","2"] -> sum numerically; missing args default to 0
 func Add(args []string) (string, error) {

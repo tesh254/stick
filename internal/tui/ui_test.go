@@ -17,7 +17,7 @@ func TestFunctionRenderer_ExecuteAndRender_Success(t *testing.T) {
     if err != nil {
         t.Fatalf("unexpected error: %v", err)
     }
-    if !strings.Contains(styled, "Function Result") || !strings.Contains(styled, "hello") {
+    if !strings.Contains(styled, "✅ success") || !strings.Contains(styled, "hello") {
         t.Fatalf("styled output missing expected content: %q", styled)
     }
 }
@@ -33,7 +33,7 @@ func TestFunctionRenderer_ExecuteAndRender_UnknownFunction(t *testing.T) {
     if !strings.Contains(err.Error(), "unknown function") {
         t.Fatalf("unexpected error message: %v", err)
     }
-    if !strings.Contains(styled, "Function Error") {
+    if !strings.Contains(styled, "⛔️ error") {
         t.Fatalf("expected styled error output, got: %q", styled)
     }
 }
@@ -54,7 +54,7 @@ func TestFunctionRenderer_ExecuteAndRender_CaseSensitiveCheck(t *testing.T) {
     if err != nil {
         t.Fatalf("unexpected error with case-insensitive option: %v", err)
     }
-    if !strings.Contains(styled, "Function Result") || !strings.Contains(styled, "x") {
+    if !strings.Contains(styled, "✅ success") || !strings.Contains(styled, "x") {
         t.Fatalf("styled output missing expected content: %q", styled)
     }
 }

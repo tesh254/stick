@@ -755,7 +755,7 @@ func websearch(args WebsearchArgs) (string, <-chan string) {
         results := parseSearchResults(body, topK)
 
         var sb strings.Builder
-        sb.WriteString(fmt.Sprintf("# Google Search Results\n\n"))
+        sb.WriteString("# Google Search Results\n\n")
         sb.WriteString(fmt.Sprintf("- Query: %s\n", query))
         sb.WriteString(fmt.Sprintf("- Top K: %d\n", topK))
         sb.WriteString(fmt.Sprintf("- Endpoint: %s\n\n", base))
